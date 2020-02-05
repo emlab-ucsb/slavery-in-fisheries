@@ -254,13 +254,6 @@ performance %>%
   facet_grid(.metric~.,scales="free") +
   theme_bw()
 
-# Find optimal hyperparameter set that maximizes the modified F1 estimator
-optimal_hyperparameters <- performance %>% 
-  filter(bagging,under_ratio==1) %>%
-  filter(.metric=="modified_f1") %>%
-  arrange(desc(mean_performance)) %>%
-  slice(1)
-
 ```
 
 ```{r}
@@ -408,10 +401,10 @@ saveRDS(predictions_final,paste0(data_directory,"/predictions_final.Rdata"))
 # Make figures
 
 ```{r}
-predictions_final <- readRDS(data_directory,"/predictions_final.Rdata")
+predictions_final <- readRDS(paste0(data_directory,"/predictions_final.Rdata"))
 
 
-predictions <- predictions_final %>%
+predictions_figures <- predictions_final %>%
   dplyr::select (predict)%>%
   unnest(predict) %>%
     # Take average prediction for each vessel-year (mmsi and year) across bags
@@ -429,14 +422,14 @@ predictions <- predictions_final %>%
   mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
 
 # Do google checks
-check_positive <- predictions %>% 
+check_positive <- predictions_figures %>% 
   filter(class == 1 & offender ==0) %>% 
   arrange(desc(probability)) %>% 
   dplyr::select(mmsi,probability) %>% 
   # Add extra one since there is one multiple in there
   slice(1:51)
 
-check_negative <- predictions %>% 
+check_negative <- predictions_figures %>% 
   filter(offender ==0) %>% 
   dplyr::select(mmsi,probability) %>% 
   sample_n(50)
@@ -448,7 +441,7 @@ check_negative <- predictions %>%
 
 ## Variable importance
 ```{r}
-vessel_lookup <- read_csv(here::here("data/indicator_lookup.csv"))
+vessel_lookup <- read_csv(here::here("raw_data/indicator_lookup.csv"))
 importance_fig <- predictions_final %>%
   mutate(var_imp = map(fit,function(x){
     x$fit$fit$fit$variable.importance%>%
@@ -490,7 +483,7 @@ n_fun <- function(x){
   return(data.frame(y = max(x) + 0.05, label = paste0("n = ",prettyNum(length(x),big.mark=","))))
 }
 
-class_fig <- predictions  %>%
+class_fig <- predictions_figures  %>%
   ggplot(aes(x=Prediction,y=.pred_1,fill=Label)) + 
   geom_boxplot(position = position_dodge(width = 0.75)) + 
   coord_flip() + 
@@ -511,15 +504,15 @@ ggsave(here::here("output_figures/fig_s3.png"),class_fig,width=7.5,height=3.5,de
 ## High risk vessels and crew over time
 
 ```{r}
-number_high_risk_vessels <- predictions %>%
+number_high_risk_vessels <- predictions_figures %>%
     filter(class ==1) %>%
     .$mmsi %>% unique() %>% length()
 
 fraction_high_risk_vessels <- number_high_risk_vessels /
-  (predictions %>%
+  (predictions_figures %>%
     .$mmsi %>% unique() %>% length())
 
-number_affected_crew <- predictions %>%
+number_affected_crew <- predictions_figures %>%
   filter(class ==1) %>%
   group_by(mmsi) %>%
   summarize(mean_crew = mean(crew_size,na.rm=TRUE)) %>%
@@ -527,7 +520,7 @@ number_affected_crew <- predictions %>%
   .$mean_crew %>%
   sum()
 
-flag_predictions_other <- predictions %>%
+flag_predictions_other <- predictions_figures %>%
   filter(fishing_hours > 0) %>%
   #filter(year == 2018) %>%
   filter(class == 1) %>%
@@ -536,7 +529,24 @@ flag_predictions_other <- predictions %>%
   ungroup() %>%
   group_by(gear) %>%
   mutate(fraction = count_vessels / sum(count_vessels)) %>%
-  mutate(Other = ifelse(fraction<0.05,TRUE,FALSE))
+  mutate(Other = ifelse(fraction<0.025,TRUE,FALSE))
+crew_vessels_fig_data <- predictions_figures  %>%
+  filter(fishing_hours > 0) %>%
+  #filter(year == 2018) %>%
+  filter(class == 1) %>%
+  left_join(flag_predictions_other,by=c("Country","gear")) %>%
+  mutate(Country = ifelse(Other,"Other",Country))%>%
+  group_by(mmsi,Country,gear,year) %>%
+  summarize(crew_size = mean(crew_size)) %>%
+  ungroup() %>%
+  group_by(Country,gear,year) %>%
+  summarize(`Number of vessels` = n(),
+            `Number of crew` = sum(crew_size)) %>%
+  ungroup() %>%
+  gather("indicator","count",-gear,-Country,-year) %>%
+  mutate(indicator = fct_relevel(indicator,c("Number of vessels","Number of crew")))
+
+write_csv(crew_vessels_fig_data,here::here("interim_data/crew_vessels_fig_data_fig_2.csv"))
 crew_vessels_fig <- crew_vessels_fig_data %>%
   mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
                           gear=="squid_jigger" ~ "Squid jigger",
@@ -561,7 +571,7 @@ ggsave(here::here("output_figures/fig_2.png"),crew_vessels_fig,width=7.5,height=
 
 
 ```{r}
-training_df_figure <- read_csv(here::here("data/training_full.csv")) %>%
+training_df_figure <- read_csv(here::here("raw_data/training_full.csv")) %>%
   filter(!is.na(flag)) %>%
   # Only include gears for which we have known offenders
   filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
@@ -648,7 +658,7 @@ ggsave(here::here("output_figures/fig_s1.png"),training_dataset_fig,width=7.5,he
 as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
 # Upload risk predictions
 bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
-  bq_table_upload(values = predictions %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear) %>%
+  bq_table_upload(values = predictions_figures %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear) %>%
                     mutate(mmsi = as.numeric.factor(mmsi),
                            year = as.numeric.factor(year),
                            offender = as.numeric.factor(offender)),
@@ -1014,26 +1024,26 @@ port_map_figure_rel <-   world_land_ports %>%
 #port_map_figure <- cowplot::plot_grid(port_map_figure_abs,port_map_figure_rel)
 port_map_figure_rel
 
-ggsave(paste0(data_directory,path="paper-figs/fig_4.png"),port_map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)      
+ggsave(here::here("/output_figures/fig_4.png"),port_map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)      
 ```
 
 ## Paper stats
 ```{r}
-n_predicted_positive_vessel_years <- predictions %>%
+n_predicted_positive_vessel_years <- predictions_figures %>%
   filter(Prediction == "Positive") %>%
   nrow()
 
 fraction_positive_vessel_years <- n_predicted_positive_vessel_years / nrow(training_df)
 
 
-n_predicted_positive_vessels <- predictions %>%
+n_predicted_positive_vessels <- predictions_figures %>%
   filter(Prediction == "Positive") %>%
   distinct(mmsi) %>%
   nrow()
 
-fraction_positive_vessels <- n_predicted_positive_vessels / length(unique(predictions$mmsi))
+fraction_positive_vessels <- n_predicted_positive_vessels / length(unique(predictions_figures$mmsi))
 
-n_positive_crew <- predictions %>%
+n_positive_crew <- predictions_figures %>%
   filter(Prediction == "Positive") %>%
   distinct(mmsi,crew_size) %>%
   .$crew_size %>%
@@ -1043,11 +1053,11 @@ mean_cv_recall <- cv_performance %>%
   filter(.metric=="recall") %>%
   .$mean_performance
 
-correct_positives <- predictions %>%
+correct_positives <- predictions_figures %>%
   filter(Prediction == "Positive" & Label == "Positive") %>%
   nrow()
 
-fraction_correct_positives <- correct_positives / (predictions %>%
+fraction_correct_positives <- correct_positives / (predictions_figures %>%
   filter( Label == "Positive") %>%
   nrow())
 ```
