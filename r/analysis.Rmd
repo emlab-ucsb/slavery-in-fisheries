@@ -311,6 +311,7 @@ write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance.csv"))
 # Read in cached bag performance
 bag_performance <- read_csv(paste0(data_directory,"/tidy_cv_bag_performance.csv"))
 cv_performance_fig <- bag_performance %>%
+  filter(!is.na(under_ratio) | number_bags ==1) %>%
   mutate(number_bags = paste0("Number bags: ",number_bags)) %>%
   mutate(model_type=ifelse(model_type=="random-forest","Random forest","Support vector\nmachine")) %>%
   mutate(under_ratio = ifelse(is.na(under_ratio),"",under_ratio))  %>% 
