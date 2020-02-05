@@ -67,7 +67,7 @@ ucsb_project <- "ucsb-gfw"
 gfw_project <- "world-fishing-827"
 ```
 
-```{r}
+```{r eval = FALSE}
 # Recipe for processing data within each sampling iteration
 fl_rec <- recipes::recipe(offender ~ ., data = head(training_df)) %>%
   recipes::update_role(mmsi, new_role = "id variable") %>%
@@ -96,7 +96,7 @@ fl_rec <- recipes::recipe(offender ~ ., data = head(training_df)) %>%
   recipes::step_scale(all_numeric())
 ```
 
-```{r}
+```{r eval = FALSE}
 # Define model specs
 # Random forest
 # Use default hyperparameters
@@ -112,7 +112,7 @@ svm_mod <- svm_rbf(mode = "classification") %>%
   set_engine("kernlab",scaled=FALSE)
 ```
 
-```{r}
+```{r eval = FALSE}
 # Cross-validation
 # Ensure there is no splitting across source_id (and consequently fldb_vessel_id) across analysis and assessment datasets
 cv_splits <- group_vfold_cv(training_df, 
@@ -197,6 +197,9 @@ write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions.csv"))
 predictions <- read_csv(paste0(data_directory,"/tidy_cv_predictions.csv")) %>%
   # Make offender =1 reference level
   mutate(offender = relevel(as.factor(offender),"1"))
+```
+
+```{r  eval = FALSE}
 tic()
 performance <- predictions %>%
   # For each fold and hyperparameter set, take average prediction for each vessel-year (mmsi and year) across bags
@@ -256,7 +259,7 @@ performance %>%
 
 ```
 
-```{r}
+```{r eval = FALSE}
 bag_performance <- map_df(bag_vec$bag,function(x){
   tmp_performance <- predictions %>%
     filter(bag<=x) %>%
@@ -346,7 +349,7 @@ cv_performance <- performance %>%
 optimized_model$.threshold <- cv_performance$.threshold[1]
 ```
 
-```{r}
+```{r eval = FALSE}
 # Train final model on full dataset
 tic()
 # Define all model runs
@@ -1064,7 +1067,7 @@ fraction_correct_positives <- correct_positives / (predictions_figures %>%
 
 # Greenpeace verification
 
-```{r}
+```{r eval = FALSE}
 sql<-"WITH
   risk AS(
   SELECT
@@ -1137,7 +1140,7 @@ high_risk_performance <- matched_boats %>%
 
 # Time at sea stat for paper - fraction of total time at sea by included vessels
 
-```{r}
+```{r eval = FALSE}
 sql<-"WITH
 included_vessels AS(
 SELECT
