@@ -1,0 +1,1165 @@
+---
+title: "Forced labor final model building and predictions"
+author: "Gavin McDonald - Sustainable Fisheries Group"
+date: '`r format(Sys.time(), "%m/%d/%Y")`'
+output: 
+  pdf_document: 
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.height=9.5, fig.width=7.5)
+```
+
+```{r}
+set.seed(101)
+# Necessary libraries
+library(tidyverse)
+library(tidymodels)
+library(tictoc)
+library(workflows)
+library(countrycode)
+library(bigrquery)
+library(sf)
+library(here)
+library(rworldmap)
+# Load custom threshold_perf function, adapted from probably::threshold_perf to give different metrics
+source(here::here("r/threshold_perf_custom.R"))
+
+# Set data directory based on system
+# This references the emLab shared Team Drive
+data_directory <- ifelse(Sys.info()["sysname"]=="Windows","G:/Shared\ drives/emLab/Projects/current-projects/forced-labor-and-fisheries/data/phase-1",
+                         "/Volumes/GoogleDrive/Shared\ drives/emLab/Projects/current-projects/forced-labor-and-fisheries/data/phase-1")
+
+# Read in cached data
+training_df <- read_csv(here::here("raw_data/training_full.csv")) %>%
+  filter(!is.na(flag)) %>%
+  # Only include gears for which we have known offenders
+  filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
+  dplyr::select(-years_until_caught) %>%
+  # Add unique id for every row
+  mutate(unique_id = row_number()) %>%
+  # Make binaries into 1s/0s
+  mutate(offender = ifelse(offender,1,0),
+         actual = offender,
+         foc = ifelse(foc,1,0),
+         iuu = ifelse(iuu,1,0)) %>%
+  # Add media source id
+  # If it's not a known offender, create dummy ID for CV
+  mutate(source_id = ifelse(is.na(source_id),
+                            paste0("no_source_",row_number()),
+                            source_id)) %>%
+  # Add forced labor database vessel id
+  # If it's not a known offender, create dummy ID for CV
+  mutate(fldb_vessel_id = ifelse(is.na(fldb_vessel_id),
+                            paste0("no_fldb_info_",row_number()),
+                            fldb_vessel_id)) %>%
+  # Make these columns factors
+  mutate_at(
+     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender","actual","unique_id"),
+     list(as.factor))
+
+# Bigquery project
+ucsb_project <- "ucsb-gfw"
+# Use GFW account, but only for this project
+gfw_project <- "world-fishing-827"
+```
+
+```{r}
+# Recipe for processing data within each sampling iteration
+fl_rec <- recipes::recipe(offender ~ ., data = head(training_df)) %>%
+  recipes::update_role(mmsi, new_role = "id variable") %>%
+  recipes::update_role(fldb_vessel_id, new_role = "id variable") %>%
+  recipes::update_role(source_id, new_role = "id variable") %>%
+  recipes::update_role(unique_id, new_role = "id variable") %>%
+  recipes::update_role(actual, new_role = "id variable") %>%
+  # Downsample unlabaled vessels
+  # Skip=TRUE so that the testing dataset is not downsampled when baking
+  # Do this at random every time
+  #recipes::step_downsample("offender",under_ratio = tune(),skip=TRUE)  %>%
+  recipes::step_knnimpute(ais_type,impute_with = c("gear","flag","length_m")) %>%
+  # Box-Cox transformation on all numeric
+  recipes::step_BoxCox(all_numeric()) %>%
+  # Group flags with less than 1% into other
+  recipes::step_other(flag, threshold = 0.01) %>%
+  # Create dummy variables for factor columns like flag, ais_type
+  recipes::step_dummy(all_predictors(), -all_numeric()) %>%
+  # Remove near-zero variance numeric predictors
+  recipes::step_nzv(all_predictors()) %>%
+  # Remove numeric predictors that have correlation greater the 75%
+  recipes::step_corr(all_numeric(), threshold = 0.75) %>%
+  # Center all numeric predictors
+  recipes::step_center(all_numeric()) %>%
+  # Scale all numeric predictors
+  recipes::step_scale(all_numeric())
+```
+
+```{r}
+# Define model specs
+# Random forest
+# Use default hyperparameters
+rf_mod <- rand_forest(
+  mode = "classification",
+  trees = 1000
+) %>%
+  set_engine("ranger")
+
+# SVM
+# Use default hyperparameters
+svm_mod <- svm_rbf(mode = "classification") %>%
+  set_engine("kernlab",scaled=FALSE)
+```
+
+```{r}
+# Cross-validation
+# Ensure there is no splitting across source_id (and consequently fldb_vessel_id) across analysis and assessment datasets
+cv_splits <- group_vfold_cv(training_df, 
+                            group = source_id,
+                            v = 10)
+
+# NA means no downsampling, so just the regular base classifier
+under_ratio_vec <- tibble(under_ratio = c(NA,seq(1,5)))
+# Number of bags
+bag_vec <- tibble(bag = seq(5))
+# Different models to try
+model_type_vec <- tibble(model_type = c("random-forest","svm"))
+tic()
+# Define all model runs
+model_runs <-cv_splits %>%
+  # For each CV fold, try different downsampling ratios if bagging
+  # Also perform a number of bags
+  crossing(under_ratio_vec,
+           bag_vec) %>%
+  mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
+  # Don't need to bag if not doing downsampling
+  filter(!(!bagging & bag >1)) %>%
+  # Want different seed each time downsampling is done, for bagging
+  mutate(seed = sample.int(10^5,n())) %>%
+  mutate(recipe = map2(seed,bagging,function(x,y){
+    # Add downsampling to pre-processing recipe if bagging
+    ifelse(!y,
+           tmp_recipe <- fl_rec,
+           tmp_recipe <- fl_rec %>%
+             step_downsample("offender",under_ratio=y,seed=x,skip=TRUE))
+    return(tmp_recipe)
+  }),
+  # Create analysis dataset based on CV folds
+  analysis = map(splits,~analysis(.x)),
+   # Create assessment dataset based on CV folds
+  assessment = map(splits,~assessment(.x))) %>%
+  # Now build models for all hyperparameters
+  crossing(model_type_vec) %>%
+  # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
+  mutate(workflow = map2(recipe,model_type,function(x,y){
+    # Add either random forest or svm to worflow, along with appropriate recipe
+    ifelse(y == "random-forest",
+           tmp_workflow <- workflow() %>%
+                           add_model(rf_mod) %>%
+                           add_recipe(x),
+           tmp_workflow <- workflow() %>%
+                           add_model(svm_mod) %>%
+                           add_recipe(x))
+    return(tmp_workflow)
+  })) %>%
+  # No longer need these columns
+  dplyr::select(-splits,-recipe)
+toc()
+# Initialize progress bar
+pb <- progress_estimated(nrow(model_runs))
+
+tic()
+# Make predictions for all model runs
+predictions <- model_runs %>%
+  mutate(predict = pmap(list(x=workflow,y=analysis,z=assessment),function(x,y,z){
+     # Fit analysis data using workflow
+    tmp <- fit(x,y) %>%
+      # Predict assessment data using fit
+      predict(z, type = "prob") %>%
+      # Add predictions to assessment data
+      bind_cols(z) %>%
+      # Select relevant columns
+      dplyr::select(mmsi,year,offender,.pred_1)
+    # Increment progress bar
+    pb$tick()$print()
+    return(tmp)})) %>%
+  # Select relevant columns
+  dplyr::select(id,model_type,bagging,under_ratio,bag,predict) %>%
+  unnest(predict)
+toc()
+# Save CV predictions
+write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions.csv"))
+```
+
+```{r}
+# Load cached predictions
+predictions <- read_csv(paste0(data_directory,"/tidy_cv_predictions.csv")) %>%
+  # Make offender =1 reference level
+  mutate(offender = relevel(as.factor(offender),"1"))
+tic()
+performance <- predictions %>%
+  # For each fold and hyperparameter set, take average prediction for each vessel-year (mmsi and year) across bags
+  group_by(id,model_type,bagging,under_ratio,mmsi,year) %>%
+  summarize(offender = offender[1],
+            .pred_1 = mean(.pred_1,na.rm=TRUE)) %>%
+  ungroup() %>%
+  # Then we will calculate performance metrics, by threshold, for each fold and hyperparameter set
+  group_by(id,model_type,bagging,under_ratio) %>%
+  nest() %>%
+  ungroup() %>%
+  # Calculated metrics will include recall, modified_f1, and detection_prevalence
+  mutate(threshold_perf = map(data,~threshold_perf_custom(.x,
+                                                  truth = offender,
+                                                  estimate = .pred_1,
+               thresholds=seq(0.01,0.99,0.01)))) %>%
+  dplyr::select(-data) %>%
+  unnest(threshold_perf) %>%
+  # Now for each hyperparameter set, we will take the average performance across all folds
+  group_by(model_type,bagging,under_ratio,.threshold,.metric) %>%
+  summarize(mean_performance = mean(.estimate,na.rm=TRUE),
+            sd_performance = sd(.estimate,na.rm=TRUE)) %>%
+  ungroup() %>%
+  group_by(model_type,bagging,under_ratio) %>%
+  nest() %>%
+  ungroup() %>%
+  # Now we will find the optimial threshold for maximizing the modified F1 estimator
+  # Maximize the mean
+  mutate(optimal_threshold = map_dbl(data,~.x %>%
+                                   filter(.metric=="modified_f1") %>%
+                                   arrange(desc(mean_performance)) %>%
+                                             slice(1) %>%
+                                             .$.threshold),
+         # optimized_metrics will contain metrics with optimized modified F1 estimator
+         optimized_metrics = map2(data,optimal_threshold,~.x %>%
+                                    filter(.threshold==.y))) %>% 
+  unnest(optimized_metrics) %>%
+  dplyr::select(-optimal_threshold,-data)
+toc()
+# Save performance estimates for later
+write_csv(performance,paste0(data_directory,"/tidy_cv_performance.csv"))
+```
+
+```{r}
+# Read cached performance
+performance <- read_csv(paste0(data_directory,"/tidy_cv_performance.csv"))
+performance %>%
+  mutate(error_min = pmax(mean_performance-sd_performance,0),
+         error_max = ifelse(.metric=="recall",pmin(mean_performance+sd_performance,1),mean_performance+sd_performance)) %>%
+  mutate(under_ratio = ifelse(is.na(under_ratio),0,under_ratio)) %>%
+  filter(.metric %in% c("recall","modified_f1")) %>% 
+  ggplot(aes(x = factor(under_ratio),y=mean_performance,color=model_type)) + 
+  geom_point(position=position_dodge(width=0.5)) +
+  geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.5),width=0.5) + 
+  facet_grid(.metric~.,scales="free") +
+  theme_bw()
+
+# Find optimal hyperparameter set that maximizes the modified F1 estimator
+optimal_hyperparameters <- performance %>% 
+  filter(bagging,under_ratio==1) %>%
+  filter(.metric=="modified_f1") %>%
+  arrange(desc(mean_performance)) %>%
+  slice(1)
+
+```
+
+```{r}
+bag_performance <- map_df(bag_vec$bag,function(x){
+  tmp_performance <- predictions %>%
+    filter(bag<=x) %>%
+    # For each fold and hyperparameter set, take average prediction for each vessel-year (mmsi and year) across bags
+    group_by(id,model_type,under_ratio,mmsi,year) %>%
+    summarize(offender = offender[1],
+              .pred_1 = mean(.pred_1,na.rm=TRUE)) %>%
+    ungroup() %>%
+    # Then we will calculate performance metrics, by threshold, for each fold and hyperparameter set
+    group_by(id,model_type,under_ratio) %>%
+    nest() %>%
+    ungroup() %>%
+    # Calculated metrics will include recall, modified_f1, and detection_prevalence
+    mutate(threshold_perf = map(data,~threshold_perf_custom(.x,
+                                                            truth = offender,
+                                                            estimate = .pred_1,
+                                                            thresholds=seq(0.01,0.99,0.01)))) %>%
+    dplyr::select(-data) %>%
+    unnest(threshold_perf) %>%
+    # Now for each hyperparameter set, we will take the average performance across all folds
+    group_by(model_type,under_ratio,.threshold,.metric) %>%
+    summarize(mean_performance = mean(.estimate,na.rm=TRUE),
+              sd_performance = sd(.estimate,na.rm=TRUE)) %>%
+    ungroup() %>%
+    group_by(model_type,under_ratio) %>%
+    nest() %>%
+    ungroup() %>%
+    # Now we will find the optimial threshold for maximizing the modified F1 estimator
+    # Maximize the mean
+    mutate(optimal_threshold = map_dbl(data,~.x %>%
+                                         filter(.metric=="modified_f1") %>%
+                                         arrange(desc(mean_performance)) %>%
+                                         slice(1) %>%
+                                         .$.threshold),
+           # optimized_metrics will contain metrics with optimized modified F1 estimator
+           optimized_metrics = map2(data,optimal_threshold,~.x %>%
+                                      filter(.threshold==.y))) %>% 
+    unnest(optimized_metrics) %>%
+    dplyr::select(-optimal_threshold,-data) %>%
+    mutate(number_bags = x)
+  print(paste(x,"complete"))
+  tmp_performance
+})
+# Save bag performance estimates for later
+write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance.csv"))
+```
+
+```{r}
+# Read in cached bag performance
+bag_performance <- read_csv(paste0(data_directory,"/tidy_cv_bag_performance.csv"))
+cv_performance_fig <- bag_performance %>%
+  mutate(number_bags = paste0("Number bags: ",number_bags)) %>%
+  mutate(model_type=ifelse(model_type=="random-forest","Random forest","Support vector\nmachine")) %>%
+  mutate(under_ratio = ifelse(is.na(under_ratio),"",under_ratio))  %>% 
+  mutate(error_min = pmax(mean_performance-sd_performance,0),
+         error_max = ifelse(.metric=="recall",pmin(mean_performance+sd_performance,1),mean_performance+sd_performance)) %>%
+#  filter(.metric %in% c("recall","modified_f1")) %>% 
+    mutate(.metric = case_when(.metric=="recall"~"Recall",
+                               .metric=="modified_f1"~"Modified F1",
+                               TRUE~"Detection prevalence")) %>%
+  mutate(.metric = fct_relevel(.metric,"Recall","Detection prevalence")) %>%
+  ggplot(aes(x = factor(under_ratio),y=mean_performance,color=model_type)) + 
+  geom_point(position=position_dodge(width=0.75)) +
+  geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.75),width=0.5) + 
+  facet_grid(.metric~number_bags,scales="free") +
+  labs(x = "Downsampling ratio",
+       y = "Mean across folds\n+/- 1 standard deviation")+ 
+  theme_bw() +
+  theme(strip.background =element_rect(fill=NA)) +
+  disco::scale_color_disco("Model type")
+
+cv_performance_fig
+
+ggsave(here::here("output_figures/fig_s2.png"),cv_performance_fig,width=7.5,height=7.5,device="png",dpi=300)
+
+# Non-bagging version has standard error too large
+# Stick with 5 bags to reduce variation
+# Stick with under_ratio of 1 for simplest model
+# Random forest has lowest standard deviation for modified f1, and has a higher recall
+optimized_model <- tibble(model_type = "random-forest",
+                          bagging = TRUE,
+                          under_ratio = 1)
+
+cv_performance <- performance %>% 
+  inner_join(optimized_model,by = c("model_type", "bagging", "under_ratio"))
+
+optimized_model$.threshold <- cv_performance$.threshold[1]
+```
+
+```{r}
+# Train final model on full dataset
+tic()
+# Define all model runs
+model_runs_final <-crossing(under_ratio_vec,
+                            bag_vec) %>%
+  mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
+  # Don't need to bag if not doing downsampling
+  filter(!(!bagging & bag >1)) %>%
+  # Want different seed each time downsampling is done, for bagging
+  mutate(seed = sample.int(10^5,n())) %>%
+  mutate(recipe = map2(seed,bagging,function(x,y){
+    # Add downsampling to pre-processing recipe if bagging
+    ifelse(!y,
+           tmp_recipe <- fl_rec,
+           tmp_recipe <- fl_rec %>%
+             step_downsample("offender",under_ratio=y,seed=x,skip=TRUE))
+    return(tmp_recipe)
+  })) %>%
+  # Now build models for all hyperparameters
+  crossing(model_type_vec) %>%
+  # Only do optimized moel
+  inner_join(optimized_model,by=c("model_type","bagging","under_ratio")) %>%
+  # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
+  mutate(workflow = map2(recipe,model_type,function(x,y){
+    # Add either random forest or svm to worflow, along with appropriate recipe
+    ifelse(y == "random-forest",
+           tmp_workflow <- workflow() %>%
+             add_model(rf_mod %>%
+             set_args(importance = "impurity_corrected"))  %>%
+             add_recipe(x),
+           tmp_workflow <- workflow() %>%
+             add_model(svm_mod) %>%
+             add_recipe(x))
+    return(tmp_workflow)
+  })) %>%
+  # No longer need these columns
+  dplyr::select(-recipe)
+toc()
+
+# Initialize progress bar
+tic()
+# Make predictions for all model runs
+predictions_final <- model_runs_final %>%
+  mutate(fit = map(workflow,~fit(.x,training_df)),
+         predict = map(fit,~predict(.x,training_df,type="prob") %>%
+                         bind_cols(training_df)))
+toc()
+
+saveRDS(predictions_final,paste0(data_directory,"/predictions_final.Rdata"))
+```
+
+# Make figures
+
+```{r}
+predictions_final <- readRDS(data_directory,"/predictions_final.Rdata")
+
+
+predictions <- predictions_final %>%
+  dplyr::select (predict)%>%
+  unnest(predict) %>%
+    # Take average prediction for each vessel-year (mmsi and year) across bags
+    group_by(mmsi,year) %>%
+    summarize(offender = offender[1],
+              .pred_1 = mean(.pred_1,na.rm=TRUE)) %>%
+    ungroup() %>% 
+  left_join(training_df %>%
+              dplyr::select(-offender),
+            by=c("mmsi","year")) %>%
+  mutate(Country = countrycode(flag,"iso3c","country.name"))%>%
+  # Use optimal threshold found above
+  mutate(class = ifelse(.pred_1 >optimized_model$.threshold,1,0))%>% 
+  mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
+  mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
+
+# Do google checks
+check_positive <- predictions %>% 
+  filter(class == 1 & offender ==0) %>% 
+  arrange(desc(probability)) %>% 
+  dplyr::select(mmsi,probability) %>% 
+  # Add extra one since there is one multiple in there
+  slice(1:51)
+
+check_negative <- predictions %>% 
+  filter(offender ==0) %>% 
+  dplyr::select(mmsi,probability) %>% 
+  sample_n(50)
+
+#write_csv(check_positive,here::here("results/check_positive.csv"))
+
+#write_csv(check_negative,here::here("results/check_negative.csv"))
+```
+
+## Variable importance
+```{r}
+vessel_lookup <- read_csv(here::here("data/indicator_lookup.csv"))
+importance_fig <- predictions_final %>%
+  mutate(var_imp = map(fit,function(x){
+    x$fit$fit$fit$variable.importance%>%
+          as.data.frame() %>%
+          rownames_to_column() %>%
+          `colnames<-`(c("Feature", "Importance"))
+  })) %>%
+  dplyr::select(bag,var_imp) %>%
+  unnest(var_imp) %>%
+  group_by(Feature) %>%
+  summarize(Importance=mean(Importance,na.rm=TRUE)) %>%
+  ungroup() %>%
+  left_join(vessel_lookup %>%
+              rename(Feature = indicator),by="Feature") %>%
+  mutate(indicator_name = case_when(Feature == "gear_squid_jigger" ~ "Squid jigger",
+                                    Feature == "gear_drifting_longlines" ~ "Longliner",
+                                    Feature == "gear_trawlers" ~ "Trawler",
+                                    Feature == "ais_type_A" ~ "AIS device type A",
+                                    Feature == "ais_type_B" ~ "AIS device type B",
+                                    str_detect(Feature,"year") ~ paste0("Year: ", str_extract(Feature,"(\\d)+")),
+                                    str_detect(Feature,"flag") ~ paste0("Flag: ", countrycode(word(Feature, 2, sep = "_"),"iso3c","country.name")),
+                                    TRUE ~ indicator_name)) %>%
+  ggplot(aes(x = reorder(indicator_name,Importance), y = Importance)) +
+  geom_bar(stat = "identity",color="black") +
+  coord_flip() +
+  labs(x = "Feature",
+       y = "Mean importance across bags") +
+  theme_bw()
+
+importance_fig
+
+ggsave(here::here("output_figures/fig_s4.png"),importance_fig,width=7.5,height=5,device="png",dpi=300)
+```
+
+## Classification by training label
+
+```{r}
+n_fun <- function(x){
+  return(data.frame(y = max(x) + 0.05, label = paste0("n = ",prettyNum(length(x),big.mark=","))))
+}
+
+class_fig <- predictions  %>%
+  ggplot(aes(x=Prediction,y=.pred_1,fill=Label)) + 
+  geom_boxplot(position = position_dodge(width = 0.75)) + 
+  coord_flip() + 
+  geom_hline(yintercept = optimized_model$.threshold,linetype=2) +
+  labs(y = "Model risk score",
+       x = "Model classification")+
+    stat_summary(fun.data = n_fun, geom = "label",position = position_dodge(width = 0.75),show.legend = FALSE) +
+  ylim(c(0,1)) +
+  disco::scale_fill_disco(palette = "vibrant", "Training data\nlabel",direction=1,alpha=1,
+                           guide = guide_legend(reverse = TRUE) ) +
+  theme_bw()
+
+class_fig
+
+ggsave(here::here("output_figures/fig_s3.png"),class_fig,width=7.5,height=3.5,device="png",dpi=300)
+```
+
+## High risk vessels and crew over time
+
+```{r}
+number_high_risk_vessels <- predictions %>%
+    filter(class ==1) %>%
+    .$mmsi %>% unique() %>% length()
+
+fraction_high_risk_vessels <- number_high_risk_vessels /
+  (predictions %>%
+    .$mmsi %>% unique() %>% length())
+
+number_affected_crew <- predictions %>%
+  filter(class ==1) %>%
+  group_by(mmsi) %>%
+  summarize(mean_crew = mean(crew_size,na.rm=TRUE)) %>%
+  ungroup() %>%
+  .$mean_crew %>%
+  sum()
+
+flag_predictions_other <- predictions %>%
+  filter(fishing_hours > 0) %>%
+  #filter(year == 2018) %>%
+  filter(class == 1) %>%
+  group_by(Country,gear) %>%
+  summarize(count_vessels = n_distinct(mmsi)) %>%
+  ungroup() %>%
+  group_by(gear) %>%
+  mutate(fraction = count_vessels / sum(count_vessels)) %>%
+  mutate(Other = ifelse(fraction<0.05,TRUE,FALSE))
+crew_vessels_fig <- crew_vessels_fig_data %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  ggplot(aes(x = year, y = count, fill = Country)) +
+  geom_bar(stat = "identity", color = "black",size=0.25) +
+  #coord_flip() +
+  labs(x="",y="") +
+  theme_bw() +
+  disco::scale_fill_disco(palette = "rainbow", "Flag") +
+  facet_grid(indicator~gear,scales="free_y")+
+  scale_y_continuous(labels=scales::comma)+ 
+  theme(strip.background =element_rect(fill=NA),
+        axis.text.x = element_text(angle = 90, hjust = 1))
+
+crew_vessels_fig
+
+ggsave(here::here("output_figures/fig_2.png"),crew_vessels_fig,width=7.5,height=5,device="png",dpi=300)
+```
+
+
+
+
+```{r}
+training_df_figure <- read_csv(here::here("data/training_full.csv")) %>%
+  filter(!is.na(flag)) %>%
+  # Only include gears for which we have known offenders
+  filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
+  # Add unique id for every row
+  mutate(unique_id = row_number()) %>%
+  # Make binaries into 1s/0s
+  mutate(offender = ifelse(offender,1,0),
+         actual = offender,
+         foc = ifelse(foc,1,0),
+         iuu = ifelse(iuu,1,0)) %>%
+  dplyr::select(-year,-flag,-actual,-source_id,-unique_id,-years_until_caught,-fldb_vessel_id) %>%
+  mutate(ais_type = ifelse(ais_type == "A",1,0)) 
+
+asinh_trans <- function(){
+  scales::trans_new(name = 'asinh', transform = function(x) asinh(x), 
+            inverse = function(x) sinh(x))
+}
+
+indicator_figure <- recipes::recipe(offender ~ ., data = head(training_df_figure)) %>%
+  recipes::update_role(mmsi, new_role = "id variable") %>%
+  recipes::update_role(gear, new_role = "id variable") %>%
+  # Box-Cox transformation on all numeric
+  recipes::step_BoxCox(all_numeric())%>%
+  step_normalize(all_predictors()) %>%
+  prep(training_df_figure) %>%
+  juice() %>%
+  pivot_longer(cols=c(-"mmsi",-"gear",-"offender"),names_to = "indicator") %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+    left_join(vessel_lookup,by="indicator") %>%
+  mutate(offender=ifelse(offender==1,"Positive","Unlabeled")) %>%
+  ggplot(aes(x = reorder(indicator_name,value),y=value,color=factor(offender))) +
+  geom_boxplot(position=position_dodge(width=1),outlier.size = 0.1) +
+  disco::scale_color_disco(palette = "vibrant", "Training data label",direction=1,alpha=1,
+                           guide = guide_legend(reverse = TRUE) ) +
+  coord_flip() +
+  facet_grid(.~gear) +
+  scale_y_continuous(trans="asinh",breaks = scales::pretty_breaks(2)) +
+    labs(
+      x = "",
+      y = "Box-Cox transformed, centered, and scaled\nindicator vales (inverse hyperbolic sin scale)"
+    ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,size=8),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        strip.background =element_rect(fill=NA))
+
+indicator_figure
+
+ggsave(here::here("output_figures/fig_1.png"),indicator_figure,width=8,height=8,device="png",dpi=300)
+```
+
+```{r}
+training_dataset_fig <- training_df  %>%
+  mutate(offender = ifelse(offender==1,"Positive","Unlabeled")) %>%
+  mutate(Country = countrycode(flag,"iso3c","country.name")) %>%
+  group_by(gear,offender,year) %>% 
+  summarize(count=n()) %>% 
+  ungroup() %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler"))%>%
+  ggplot(aes(x=year,y=count,fill=gear)) + 
+  geom_bar(stat="identity",color="black",size=0.25) + 
+  #coord_flip() + 
+  facet_wrap(.~offender,scales="free",ncol=1)+
+  disco::scale_fill_disco(palette = "bright", "Gear") +
+  theme_bw() +
+  labs(x="Year",y="Number of vessel-years")+
+  scale_y_continuous(labels=scales::comma)+ 
+  theme(strip.background =element_rect(fill=NA))
+
+training_dataset_fig
+
+ggsave(here::here("output_figures/fig_s1.png"),training_dataset_fig,width=7.5,height=4.5,device="png",dpi=300)
+```
+
+\pagebreak
+
+## High risk fishing effort maps - 2018
+```{r eval = FALSE}
+as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
+# Upload risk predictions
+bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
+  bq_table_upload(values = predictions %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear) %>%
+                    mutate(mmsi = as.numeric.factor(mmsi),
+                           year = as.numeric.factor(year),
+                           offender = as.numeric.factor(offender)),
+                  write_disposition = "WRITE_TRUNCATE")
+
+sql <- "#standardSQL
+WITH
+  fishing_info AS(
+  SELECT
+    mmsi,
+    EXTRACT(YEAR
+    FROM
+      timestamp) year,
+    FLOOR(lat / 0.25) * 0.25 + 0.125 lat_bin,
+    FLOOR(lon / 0.25) * 0.25 + 0.125 lon_bin,
+    SUM((CASE
+          WHEN nnet_score2 = 1 AND NOT (distance_from_shore_m < 1000 AND speed < 1) THEN hours
+        ELSE
+        0
+      END
+        )) fishing_hours
+  FROM
+    `ucsb-gfw.human_rights.all_vessel_positions`
+  GROUP BY
+    mmsi,
+    lat_bin,
+    lon_bin,
+    year),
+  extra_offsetting_filter AS(
+  SELECT
+    CAST(ssvid AS INT64) mmsi,
+    year,
+    TRUE extra_offsetting
+  FROM
+    `ucsb-gfw.human_rights.extra_offsetting_filter` ),
+  vessel_info AS(
+  SELECT
+    mmsi,
+    year,
+    gear,
+    flag,
+    engine_power_kw
+  FROM
+    `ucsb-gfw.human_rights.vessel_info_all`),
+  risk AS(
+  SELECT
+    mmsi,
+    year,
+    class,
+    offender
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions`),
+  joined AS(
+  SELECT
+    *
+  FROM
+    vessel_info
+  LEFT JOIN
+    fishing_info
+  USING
+    (mmsi,
+      year)
+  LEFT JOIN
+    risk
+  USING
+    (mmsi,
+      year)
+  LEFT JOIN
+    extra_offsetting_filter
+  USING
+    (mmsi,
+      year)
+  WHERE extra_offsetting IS NULL)
+SELECT
+  year,
+  gear,
+  flag,
+  lat_bin,
+  lon_bin,
+  SUM(fishing_hours) fishing_hours,
+  SUM(fishing_hours * offender) known_offender_fishing_hours,
+  SUM(fishing_hours * class) at_risk_fishing_hours,
+  SUM(fishing_hours * engine_power_kw) fishing_kW_hours,
+  SUM(fishing_hours * offender * engine_power_kw) known_offender_fishing_kW_hours,
+  SUM(fishing_hours * class * engine_power_kw) at_risk_fishing_kW_hours
+FROM
+  joined
+GROUP BY
+  year,
+  gear,
+  flag,
+  lat_bin,
+  lon_bin"
+
+bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "grouped_fishing_info_predicted",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
+
+sql <- "#standardSQL
+  WITH base AS(
+  SELECT
+    year,
+    gear,
+    FLOOR(lat_bin / 0.5) * 0.5 + 0.25 lat_bin,
+    FLOOR(lon_bin / 0.5) * 0.5 + 0.25 lon_bin,
+    fishing_kW_hours,
+    at_risk_fishing_kW_hours,
+    known_offender_fishing_kW_hours
+  FROM
+    `ucsb-gfw.human_rights.grouped_fishing_info_predicted`
+  WHERE
+    fishing_kW_hours > 0)
+SELECT
+  year,
+  gear,
+  lat_bin,
+  lon_bin,
+  SUM(fishing_kW_hours) fishing_kW_hours,
+  SUM(at_risk_fishing_kW_hours) at_risk_fishing_kW_hours,
+  SUM(known_offender_fishing_kW_hours) known_offender_fishing_kW_hours,
+  SUM(known_offender_fishing_kW_hours) / SUM(fishing_kW_hours) fraction_known_offender_fishing_kW_hours,
+  SUM(at_risk_fishing_kW_hours) / SUM(fishing_kW_hours) fraction_at_risk_fishing_kW_hours
+FROM
+  base
+WHERE
+  gear IN('drifting_longlines',
+    'trawlers',
+    'squid_jigger')
+GROUP BY
+  year,
+  gear,
+  lat_bin,
+  lon_bin"
+
+grouped_messages <- bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf)
+
+write_csv(grouped_messages,path=paste0(data_directory,"/grouped_messages.csv"))
+write_csv(grouped_messages %>%
+            filter(year==2018) %>%
+            dplyr::select(-known_offender_fishing_kW_hours,
+                  -fraction_known_offender_fishing_kW_hours) ,path=paste0(data_directory,"/spatial_fishing_risk_fig_3.csv"))
+```
+
+```{r}
+grouped_messages <- read.csv(paste0(data_directory,"/grouped_messages.csv")) %>%
+  filter(year == 2018)
+
+world_land <- rworldmap::getMap(resolution = "low") %>%
+  st_as_sf()
+
+
+map_palette <- "inferno"
+map_palette_begin <- 0.2
+na_color <- viridis::viridis(n=5,option=map_palette,begin=map_palette_begin)[1]
+
+pal <- c(viridis::inferno(n = 8))[c(3,5:8)]
+pal <- c("midnightblue",viridis::inferno(n = 7)[c(3:7)])
+
+map_figure_rel <-   grouped_messages %>%
+  filter(!is.na(gear))%>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "(A) Longliner",
+                          gear=="squid_jigger" ~ "(B) Squid jigger",
+                          TRUE ~ "(C) Trawler")) %>%
+  ggplot() +
+  geom_tile(aes(x = lon_bin, y = lat_bin, fill = fraction_at_risk_fishing_kW_hours,color=fraction_at_risk_fishing_kW_hours)) +
+  geom_sf(data = world_land, fill = "grey45", color = "grey45") +
+  scale_fill_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill="black"),
+        panel.grid.major = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        text = element_text(size=15),
+        legend.direction = "vertical"
+  ) +
+  labs(
+    x = "",
+    y = "")+ 
+  ylim(c(-55, 90)) +
+  scale_color_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),guide=FALSE,labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  facet_wrap(.~gear,ncol=1)
+
+map_figure_rel
+ggsave(here::here("output_figures/fig_3.png"),map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)                                    
+```
+
+\pagebreak
+
+## High risk port visit maps - 2018
+
+```{r eval = FALSE}
+## Port mapping
+sql<-"#standardSQL
+WITH
+  anchorage_ids AS(
+  SELECT
+    s2id anchorage_id,
+    iso3 port_iso3
+  FROM
+    `world-fishing-827.gfw_research.named_anchorages` ),
+  port_visits AS(
+  SELECT
+    CAST(ssvid AS INT64) mmsi,
+    EXTRACT(YEAR
+    FROM
+      trip_start) year,
+    trip_start_anchorage_id anchorage_id
+  FROM
+    `world-fishing-827.gfw_research.vessel_voyages_v20190722`
+  UNION ALL (
+    SELECT
+      CAST(ssvid AS INT64) mmsi,
+      EXTRACT(YEAR
+      FROM
+        trip_start) year,
+      trip_end_anchorage_id anchorage_id
+    FROM
+      `world-fishing-827.gfw_research.vessel_voyages_v20190722`) )
+SELECT
+  *
+FROM
+  port_visits
+LEFT JOIN
+  anchorage_ids
+USING
+  (anchorage_id)"
+
+bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "port_visits",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
+
+sql <- "WITH
+  port_base AS(
+  SELECT
+    *
+  FROM
+    `ucsb-gfw.human_rights.port_visits`
+  WHERE
+    year < 2019),
+  risk_predictions AS(
+  SELECT
+    class,
+    gear,
+    year,
+    mmsi
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions`),
+  psma AS(
+  SELECT
+    iso3 port_iso3,
+    EXTRACT(YEAR
+    FROM
+      date_poc) psma_year
+  FROM
+    `ucsb-gfw.human_rights.foc_poc_database` ),
+  joined AS(
+  SELECT
+    *
+  FROM
+    port_base
+  JOIN
+    risk_predictions
+  USING
+    (mmsi,
+      year)),
+  final AS(
+  SELECT
+    year,
+    gear,
+    port_iso3,
+    COUNT(*) total_visits,
+    SUM(class) high_risk_visits,
+    SUM(class) / COUNT(*) fraction_high_risk_visits
+  FROM
+    joined
+  GROUP BY
+    year,
+    gear,
+    port_iso3)
+SELECT
+  *,
+IF
+  (psma_year IS NULL
+    OR year < psma_year,
+    FALSE,
+    TRUE) psma_country
+FROM
+  final
+LEFT JOIN
+  psma
+USING
+  (port_iso3)"
+
+bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "port_visits_risk_grouped",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
+
+sql <- "SELECT *
+  FROM
+    `ucsb-gfw.human_rights.port_visits_risk_grouped`"
+
+port_data <- bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf)
+
+write_csv(port_data,paste0(data_directory,path="/port_data.csv"))
+write_csv(port_data %>%
+            filter(year==2018),path=paste0(data_directory,"/port_risk_fig_4.csv"))
+```
+
+```{r}
+port_data <- read_csv(paste0(data_directory,path="/port_data.csv")) %>%
+  filter(year == 2018,
+         !is.na(port_iso3))
+
+world_land_ports <- world_land %>% 
+  as_tibble() %>%
+  mutate(port_iso3 = as.character(ISO3.1)) %>%
+  dplyr::select(geometry,port_iso3) %>%
+  inner_join(port_data,by="port_iso3") %>%
+  st_as_sf()
+
+countries_at_risk <- port_data %>% filter(fraction_high_risk_visits >0) %>% .$port_iso3 %>% unique() %>% sort() %>% length()
+
+countries <- length(unique(port_data$port_iso3))
+
+fraction_countries_at_risk <- countries_at_risk / countries
+
+psma_countries_at_risk <- port_data %>% filter(psma_country & fraction_high_risk_visits >0) %>% .$port_iso3 %>% unique() %>% sort()
+
+number_psma_countries_at_risk <- psma_countries_at_risk%>% length()
+
+pal <- c("midnightblue",viridis::inferno(n = 7)[c(3:7)])
+
+port_map_figure_rel <-   world_land_ports %>%
+  filter(!is.na(gear))%>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "(A) Longliner",
+                          gear=="squid_jigger" ~ "(B) Squid jigger",
+                          TRUE ~ "(C) Trawler")) %>%
+  ggplot() +
+  geom_sf(data = world_land, fill = "grey45", color = "grey45") +
+  geom_sf(aes(
+    fill = fraction_high_risk_visits
+  ),
+    color = "grey40",
+    size=0.1) +
+  scale_fill_gradientn(name = "Percentage\nport visits\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill="black"),
+        panel.grid.major = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        text = element_text(size=15),
+        legend.direction = "vertical"
+  ) +
+  labs(
+    x = "",
+    y = ""
+  ) + 
+  ylim(c(-55, 90)) + 
+  facet_wrap(.~gear,ncol=1)
+
+#port_map_figure <- cowplot::plot_grid(port_map_figure_abs,port_map_figure_rel)
+port_map_figure_rel
+
+ggsave(paste0(data_directory,path="paper-figs/fig_4.png"),port_map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)      
+```
+
+## Paper stats
+```{r}
+n_predicted_positive_vessel_years <- predictions %>%
+  filter(Prediction == "Positive") %>%
+  nrow()
+
+fraction_positive_vessel_years <- n_predicted_positive_vessel_years / nrow(training_df)
+
+
+n_predicted_positive_vessels <- predictions %>%
+  filter(Prediction == "Positive") %>%
+  distinct(mmsi) %>%
+  nrow()
+
+fraction_positive_vessels <- n_predicted_positive_vessels / length(unique(predictions$mmsi))
+
+n_positive_crew <- predictions %>%
+  filter(Prediction == "Positive") %>%
+  distinct(mmsi,crew_size) %>%
+  .$crew_size %>%
+  sum()
+
+mean_cv_recall <- cv_performance %>%
+  filter(.metric=="recall") %>%
+  .$mean_performance
+
+correct_positives <- predictions %>%
+  filter(Prediction == "Positive" & Label == "Positive") %>%
+  nrow()
+
+fraction_correct_positives <- correct_positives / (predictions %>%
+  filter( Label == "Positive") %>%
+  nrow())
+```
+
+# Greenpeace verification
+
+```{r}
+sql<-"WITH
+  risk AS(
+  SELECT
+    year,
+    mmsi,
+    probability risk_score,
+    gear,
+    class
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions`),
+  vessel_info AS(
+  SELECT
+  year,
+    CAST(ssvid AS INT64) mmsi,
+    registry_info.best_known_imo imo,
+    best.best_flag flag,
+    ais_identity.shipname_mostcommon.value shipname,
+    ais_identity.n_shipname_mostcommon.value normalized_shipname,
+    best.best_length_m length_m,
+    best.best_tonnage_gt tonnage_gt,
+    best.best_engine_power_kw engine_power_kw,
+    best.best_crew_size crew_size
+  FROM
+    `world-fishing-827.gfw_research.vi_ssvid_byyear_v20190430` )
+SELECT
+  *
+FROM
+  risk
+LEFT JOIN
+vessel_info
+USING(mmsi,year)
+ORDER BY
+  risk_score DESC"
+
+bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf) %>%
+  write_csv(path=here::here("interim_data/greenpeace_verification.csv"))
+```
+
+
+```{r}
+# From paper
+# 8 longliners, 6 of which we can match
+# https://storage.googleapis.com/planet4-southeastasia-stateless/2019/12/b68e7b93-greenpeace-seabound-book-c.pdf
+# Matching info: https://docs.google.com/spreadsheets/d/1L8bW-HpCEEQ5LwyJmnCboeAt6rOoxh9NefiirhRskM0/edit#gid=0
+greenpeace_verification <- read_csv(here::here("interim_data/greenpeace_verification.csv"))
+
+matched_boats <- greenpeace_verification %>%
+  filter(mmsi %in% c(416236600,416001084,413322770,520313000) |
+           imo %in% c(9260249,8996138,8748957))
+
+n_matched_boats <- unique(matched_boats$mmsi) %>% length()
+n_matched_vessel_years <- nrow(matched_boats)
+
+performance <- matched_boats  %>%
+  group_by(class) %>%
+  summarize(count = n())
+
+recall <- (performance %>%
+  filter(class==1) %>%
+  .$count) / nrow(matched_boats)
+
+matched_high_risk_boats <- matched_boats %>% filter(class==1)
+
+n_matched_high_risk_boats <- matched_high_risk_boats %>% .$mmsi %>% unique() %>% length()
+
+high_risk_performance <- matched_boats %>%
+  filter(mmsi %in% matched_high_risk_boats$mmsi)
+```
+
+# Time at sea stat for paper - fraction of total time at sea by included vessels
+
+```{r}
+sql<-"WITH
+included_vessels AS(
+SELECT
+year,mmsi,TRUE included
+FROM
+`ucsb-gfw.human_rights.risk_predictions`
+),
+base AS(
+SELECT
+  CAST(ssvid AS INT64) mmsi,year,
+  activity.active_hours active_hours
+FROM
+  `world-fishing-827.gfw_research.vi_ssvid_byyear_v20190430`
+  WHERE on_fishing_list_best),
+joined AS(
+ SELECT
+mmsi,
+year,
+active_hours,
+IF(included,TRUE,FALSE) included
+FROM
+base
+LEFT JOIN
+included_vessels
+USING(mmsi,year)),
+summary AS(
+SELECT
+SUM(active_hours) active_hours,
+included
+FROM joined
+GROUP BY
+included)
+SELECT
+(SELECT active_hours FROm summary WHERE included)/((SELECT active_hours FROm summary WHERE NOT included)+(SELECT active_hours FROm summary WHERE included)) fraction_active_hours_included"
+```
