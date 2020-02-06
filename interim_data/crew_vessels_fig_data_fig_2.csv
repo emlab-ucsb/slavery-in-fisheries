@@ -1,257 +1,233 @@
 Country,gear,year,indicator,count
 China,drifting_longlines,2012,Number of vessels,36
-China,drifting_longlines,2013,Number of vessels,78
-China,drifting_longlines,2014,Number of vessels,108
-China,drifting_longlines,2015,Number of vessels,192
-China,drifting_longlines,2016,Number of vessels,206
-China,drifting_longlines,2017,Number of vessels,240
-China,drifting_longlines,2018,Number of vessels,159
-China,squid_jigger,2012,Number of vessels,18
-China,squid_jigger,2013,Number of vessels,49
-China,squid_jigger,2014,Number of vessels,155
-China,squid_jigger,2015,Number of vessels,210
-China,squid_jigger,2016,Number of vessels,197
-China,squid_jigger,2017,Number of vessels,303
-China,squid_jigger,2018,Number of vessels,153
+China,drifting_longlines,2013,Number of vessels,77
+China,drifting_longlines,2014,Number of vessels,107
+China,drifting_longlines,2015,Number of vessels,186
+China,drifting_longlines,2016,Number of vessels,196
+China,drifting_longlines,2017,Number of vessels,207
+China,drifting_longlines,2018,Number of vessels,95
+China,squid_jigger,2012,Number of vessels,33
+China,squid_jigger,2013,Number of vessels,110
+China,squid_jigger,2014,Number of vessels,239
+China,squid_jigger,2015,Number of vessels,299
+China,squid_jigger,2016,Number of vessels,269
+China,squid_jigger,2017,Number of vessels,267
+China,squid_jigger,2018,Number of vessels,117
 China,trawlers,2012,Number of vessels,3
 China,trawlers,2013,Number of vessels,5
 China,trawlers,2014,Number of vessels,13
-China,trawlers,2015,Number of vessels,20
-China,trawlers,2016,Number of vessels,13
-China,trawlers,2017,Number of vessels,13
-Estonia,trawlers,2012,Number of vessels,2
-Estonia,trawlers,2013,Number of vessels,3
-Estonia,trawlers,2014,Number of vessels,3
-Estonia,trawlers,2015,Number of vessels,1
-Estonia,trawlers,2016,Number of vessels,1
-Estonia,trawlers,2017,Number of vessels,2
-Estonia,trawlers,2018,Number of vessels,1
+China,trawlers,2015,Number of vessels,16
+China,trawlers,2016,Number of vessels,9
+China,trawlers,2017,Number of vessels,4
 Falkland Islands,trawlers,2012,Number of vessels,4
-Falkland Islands,trawlers,2013,Number of vessels,10
-Falkland Islands,trawlers,2014,Number of vessels,6
-Falkland Islands,trawlers,2015,Number of vessels,4
-Faroe Islands,trawlers,2012,Number of vessels,6
+Falkland Islands,trawlers,2013,Number of vessels,7
+Falkland Islands,trawlers,2014,Number of vessels,4
+Faroe Islands,trawlers,2012,Number of vessels,4
 Faroe Islands,trawlers,2013,Number of vessels,2
-Faroe Islands,trawlers,2014,Number of vessels,2
-Faroe Islands,trawlers,2015,Number of vessels,1
-Japan,drifting_longlines,2012,Number of vessels,85
+Faroe Islands,trawlers,2014,Number of vessels,1
+Japan,drifting_longlines,2012,Number of vessels,86
 Japan,drifting_longlines,2013,Number of vessels,104
-Japan,drifting_longlines,2014,Number of vessels,134
-Japan,drifting_longlines,2015,Number of vessels,172
-Japan,drifting_longlines,2016,Number of vessels,123
-Japan,drifting_longlines,2017,Number of vessels,95
-Japan,drifting_longlines,2018,Number of vessels,28
-Norway,trawlers,2012,Number of vessels,4
-Norway,trawlers,2013,Number of vessels,2
-Norway,trawlers,2014,Number of vessels,1
-Other,drifting_longlines,2012,Number of vessels,52
-Other,drifting_longlines,2013,Number of vessels,59
-Other,drifting_longlines,2014,Number of vessels,61
-Other,drifting_longlines,2015,Number of vessels,63
-Other,drifting_longlines,2016,Number of vessels,36
-Other,drifting_longlines,2017,Number of vessels,36
-Other,drifting_longlines,2018,Number of vessels,13
-Other,squid_jigger,2012,Number of vessels,5
-Other,squid_jigger,2013,Number of vessels,6
-Other,squid_jigger,2014,Number of vessels,8
-Other,squid_jigger,2015,Number of vessels,3
-Other,squid_jigger,2016,Number of vessels,1
+Japan,drifting_longlines,2014,Number of vessels,129
+Japan,drifting_longlines,2015,Number of vessels,166
+Japan,drifting_longlines,2016,Number of vessels,85
+Japan,drifting_longlines,2017,Number of vessels,57
+Japan,drifting_longlines,2018,Number of vessels,16
+Other,drifting_longlines,2012,Number of vessels,46
+Other,drifting_longlines,2013,Number of vessels,57
+Other,drifting_longlines,2014,Number of vessels,54
+Other,drifting_longlines,2015,Number of vessels,57
+Other,drifting_longlines,2016,Number of vessels,26
+Other,drifting_longlines,2017,Number of vessels,22
+Other,drifting_longlines,2018,Number of vessels,4
+Other,squid_jigger,2012,Number of vessels,9
+Other,squid_jigger,2013,Number of vessels,9
+Other,squid_jigger,2014,Number of vessels,9
+Other,squid_jigger,2015,Number of vessels,6
+Other,squid_jigger,2016,Number of vessels,3
 Other,squid_jigger,2018,Number of vessels,2
-Other,trawlers,2012,Number of vessels,10
+Other,trawlers,2012,Number of vessels,13
 Other,trawlers,2013,Number of vessels,6
-Other,trawlers,2014,Number of vessels,8
-Other,trawlers,2015,Number of vessels,5
-Other,trawlers,2016,Number of vessels,2
-Other,trawlers,2017,Number of vessels,1
+Other,trawlers,2014,Number of vessels,5
+Other,trawlers,2015,Number of vessels,3
+Other,trawlers,2016,Number of vessels,3
+Other,trawlers,2017,Number of vessels,2
+Other,trawlers,2018,Number of vessels,1
 Portugal,trawlers,2012,Number of vessels,4
 Portugal,trawlers,2013,Number of vessels,3
 Portugal,trawlers,2014,Number of vessels,4
 Portugal,trawlers,2015,Number of vessels,6
-Portugal,trawlers,2016,Number of vessels,8
-Portugal,trawlers,2017,Number of vessels,7
-Portugal,trawlers,2018,Number of vessels,2
-Russia,trawlers,2012,Number of vessels,39
-Russia,trawlers,2013,Number of vessels,18
-Russia,trawlers,2014,Number of vessels,32
-Russia,trawlers,2015,Number of vessels,14
-Russia,trawlers,2016,Number of vessels,3
-Russia,trawlers,2017,Number of vessels,1
+Portugal,trawlers,2016,Number of vessels,7
+Portugal,trawlers,2017,Number of vessels,6
+Portugal,trawlers,2018,Number of vessels,1
+Russia,trawlers,2012,Number of vessels,50
+Russia,trawlers,2013,Number of vessels,27
+Russia,trawlers,2014,Number of vessels,28
+Russia,trawlers,2015,Number of vessels,17
+Russia,trawlers,2016,Number of vessels,4
 Seychelles,drifting_longlines,2012,Number of vessels,1
-Seychelles,drifting_longlines,2013,Number of vessels,1
-Seychelles,drifting_longlines,2014,Number of vessels,5
-Seychelles,drifting_longlines,2015,Number of vessels,16
-Seychelles,drifting_longlines,2016,Number of vessels,25
-Seychelles,drifting_longlines,2017,Number of vessels,29
-Seychelles,drifting_longlines,2018,Number of vessels,28
+Seychelles,drifting_longlines,2013,Number of vessels,2
+Seychelles,drifting_longlines,2014,Number of vessels,6
+Seychelles,drifting_longlines,2015,Number of vessels,15
+Seychelles,drifting_longlines,2016,Number of vessels,24
+Seychelles,drifting_longlines,2017,Number of vessels,31
+Seychelles,drifting_longlines,2018,Number of vessels,26
 South Korea,drifting_longlines,2012,Number of vessels,134
-South Korea,drifting_longlines,2013,Number of vessels,122
-South Korea,drifting_longlines,2014,Number of vessels,112
-South Korea,drifting_longlines,2015,Number of vessels,107
-South Korea,drifting_longlines,2016,Number of vessels,110
-South Korea,drifting_longlines,2017,Number of vessels,96
-South Korea,drifting_longlines,2018,Number of vessels,19
-South Korea,squid_jigger,2012,Number of vessels,34
-South Korea,squid_jigger,2013,Number of vessels,22
-South Korea,squid_jigger,2014,Number of vessels,31
-South Korea,squid_jigger,2015,Number of vessels,30
-South Korea,squid_jigger,2016,Number of vessels,21
-South Korea,squid_jigger,2017,Number of vessels,6
-South Korea,trawlers,2012,Number of vessels,12
+South Korea,drifting_longlines,2013,Number of vessels,121
+South Korea,drifting_longlines,2014,Number of vessels,113
+South Korea,drifting_longlines,2015,Number of vessels,106
+South Korea,drifting_longlines,2016,Number of vessels,105
+South Korea,drifting_longlines,2017,Number of vessels,75
+South Korea,drifting_longlines,2018,Number of vessels,6
+South Korea,squid_jigger,2012,Number of vessels,38
+South Korea,squid_jigger,2013,Number of vessels,38
+South Korea,squid_jigger,2014,Number of vessels,38
+South Korea,squid_jigger,2015,Number of vessels,35
+South Korea,squid_jigger,2016,Number of vessels,35
+South Korea,squid_jigger,2017,Number of vessels,13
+South Korea,trawlers,2012,Number of vessels,11
 South Korea,trawlers,2013,Number of vessels,9
-South Korea,trawlers,2014,Number of vessels,8
-South Korea,trawlers,2015,Number of vessels,6
+South Korea,trawlers,2014,Number of vessels,9
+South Korea,trawlers,2015,Number of vessels,4
 South Korea,trawlers,2016,Number of vessels,3
 Spain,trawlers,2012,Number of vessels,9
-Spain,trawlers,2013,Number of vessels,11
+Spain,trawlers,2013,Number of vessels,17
 Spain,trawlers,2014,Number of vessels,12
-Spain,trawlers,2015,Number of vessels,8
+Spain,trawlers,2015,Number of vessels,9
 Spain,trawlers,2016,Number of vessels,7
 Spain,trawlers,2017,Number of vessels,4
-Taiwan,drifting_longlines,2012,Number of vessels,18
-Taiwan,drifting_longlines,2013,Number of vessels,94
-Taiwan,drifting_longlines,2014,Number of vessels,188
-Taiwan,drifting_longlines,2015,Number of vessels,308
-Taiwan,drifting_longlines,2016,Number of vessels,355
-Taiwan,drifting_longlines,2017,Number of vessels,442
-Taiwan,drifting_longlines,2018,Number of vessels,326
-Taiwan,squid_jigger,2012,Number of vessels,71
-Taiwan,squid_jigger,2013,Number of vessels,75
-Taiwan,squid_jigger,2014,Number of vessels,58
-Taiwan,squid_jigger,2015,Number of vessels,71
-Taiwan,squid_jigger,2016,Number of vessels,14
-Taiwan,squid_jigger,2017,Number of vessels,6
+Taiwan,drifting_longlines,2012,Number of vessels,19
+Taiwan,drifting_longlines,2013,Number of vessels,95
+Taiwan,drifting_longlines,2014,Number of vessels,182
+Taiwan,drifting_longlines,2015,Number of vessels,301
+Taiwan,drifting_longlines,2016,Number of vessels,327
+Taiwan,drifting_longlines,2017,Number of vessels,373
+Taiwan,drifting_longlines,2018,Number of vessels,213
+Taiwan,squid_jigger,2012,Number of vessels,81
+Taiwan,squid_jigger,2013,Number of vessels,88
+Taiwan,squid_jigger,2014,Number of vessels,79
+Taiwan,squid_jigger,2015,Number of vessels,82
+Taiwan,squid_jigger,2016,Number of vessels,29
+Taiwan,squid_jigger,2017,Number of vessels,9
 Vanuatu,drifting_longlines,2012,Number of vessels,1
 Vanuatu,drifting_longlines,2013,Number of vessels,1
 Vanuatu,drifting_longlines,2014,Number of vessels,10
-Vanuatu,drifting_longlines,2015,Number of vessels,29
-Vanuatu,drifting_longlines,2016,Number of vessels,33
-Vanuatu,drifting_longlines,2017,Number of vessels,35
-Vanuatu,drifting_longlines,2018,Number of vessels,20
+Vanuatu,drifting_longlines,2015,Number of vessels,28
+Vanuatu,drifting_longlines,2016,Number of vessels,32
+Vanuatu,drifting_longlines,2017,Number of vessels,29
+Vanuatu,drifting_longlines,2018,Number of vessels,11
 China,drifting_longlines,2012,Number of crew,722.435682143375
-China,drifting_longlines,2013,Number of crew,1640.0605989265775
-China,drifting_longlines,2014,Number of crew,2344.992788353633
-China,drifting_longlines,2015,Number of crew,4133.665980129725
-China,drifting_longlines,2016,Number of crew,4568.1381114129335
-China,drifting_longlines,2017,Number of crew,5431.98652668363
-China,drifting_longlines,2018,Number of crew,3766.283444142029
-China,squid_jigger,2012,Number of crew,521.2737494624666
-China,squid_jigger,2013,Number of crew,1415.2539588653221
-China,squid_jigger,2014,Number of crew,4246.772980812908
-China,squid_jigger,2015,Number of crew,5663.445798914317
-China,squid_jigger,2016,Number of crew,5119.980150562805
-China,squid_jigger,2017,Number of crew,7390.167093736673
-China,squid_jigger,2018,Number of crew,3782.8665072069507
+China,drifting_longlines,2013,Number of crew,1609.6736810622774
+China,drifting_longlines,2014,Number of crew,2315.3216970849257
+China,drifting_longlines,2015,Number of crew,4011.220789600735
+China,drifting_longlines,2016,Number of crew,4401.7599342034955
+China,drifting_longlines,2017,Number of crew,4766.201360578891
+China,drifting_longlines,2018,Number of crew,2304.355785257117
+China,squid_jigger,2012,Number of crew,904.0867635762412
+China,squid_jigger,2013,Number of crew,2924.3966158089797
+China,squid_jigger,2014,Number of crew,6190.6412378703635
+China,squid_jigger,2015,Number of crew,7790.620427812494
+China,squid_jigger,2016,Number of crew,6763.737515774372
+China,squid_jigger,2017,Number of crew,6502.486788638458
+China,squid_jigger,2018,Number of crew,2963.0659637324247
 China,trawlers,2012,Number of crew,150.45094016771978
-China,trawlers,2013,Number of crew,402.5682264130103
+China,trawlers,2013,Number of crew,320.00823739991023
 China,trawlers,2014,Number of crew,546.3339719971698
-China,trawlers,2015,Number of crew,993.1108272225144
-China,trawlers,2016,Number of crew,390.7894094075498
-China,trawlers,2017,Number of crew,446.35191133980015
-Estonia,trawlers,2012,Number of crew,48.8841805782
-Estonia,trawlers,2013,Number of crew,61.1491752636
-Estonia,trawlers,2014,Number of crew,88.09410516734846
-Estonia,trawlers,2015,Number of crew,31.71625539183846
-Estonia,trawlers,2016,Number of crew,31.71625539183846
-Estonia,trawlers,2017,Number of crew,60.15542514896346
-Estonia,trawlers,2018,Number of crew,31.71625539183846
+China,trawlers,2015,Number of crew,730.2907594592452
+China,trawlers,2016,Number of crew,240.39797934415924
+China,trawlers,2017,Number of crew,106.16482725116452
 Falkland Islands,trawlers,2012,Number of crew,176.04899027794286
-Falkland Islands,trawlers,2013,Number of crew,446.39115041120715
-Falkland Islands,trawlers,2014,Number of crew,271.37529824730717
-Falkland Islands,trawlers,2015,Number of crew,203.98936101947857
-Faroe Islands,trawlers,2012,Number of crew,152.7508939184407
+Falkland Islands,trawlers,2013,Number of crew,293.2765817266929
+Falkland Islands,trawlers,2014,Number of crew,183.6975772753
+Faroe Islands,trawlers,2012,Number of crew,104.22500516855823
 Faroe Islands,trawlers,2013,Number of crew,44.65264364237143
-Faroe Islands,trawlers,2014,Number of crew,55.151940679271426
-Faroe Islands,trawlers,2015,Number of crew,31.311100658271428
-Japan,drifting_longlines,2012,Number of crew,2099.7814587734756
-Japan,drifting_longlines,2013,Number of crew,2534.428409183941
-Japan,drifting_longlines,2014,Number of crew,3147.335555912133
-Japan,drifting_longlines,2015,Number of crew,3866.979575086705
-Japan,drifting_longlines,2016,Number of crew,2854.2901308431883
-Japan,drifting_longlines,2017,Number of crew,2228.431472093328
-Japan,drifting_longlines,2018,Number of crew,624.7779043584143
-Norway,trawlers,2012,Number of crew,170.344589836675
-Norway,trawlers,2013,Number of crew,100
-Norway,trawlers,2014,Number of crew,59
-Other,drifting_longlines,2012,Number of crew,1015.8614383690543
-Other,drifting_longlines,2013,Number of crew,1149.0058783134068
-Other,drifting_longlines,2014,Number of crew,1167.3860465077928
-Other,drifting_longlines,2015,Number of crew,1292.7792676945892
-Other,drifting_longlines,2016,Number of crew,681.5003581101881
-Other,drifting_longlines,2017,Number of crew,653.3290069204085
-Other,drifting_longlines,2018,Number of crew,229.20633443558296
-Other,squid_jigger,2012,Number of crew,176.9914726843119
-Other,squid_jigger,2013,Number of crew,194.2337439384596
-Other,squid_jigger,2014,Number of crew,254.51472517596267
-Other,squid_jigger,2015,Number of crew,105.1684437464894
-Other,squid_jigger,2016,Number of crew,29.8052002767
-Other,squid_jigger,2018,Number of crew,47.5561411604
-Other,trawlers,2012,Number of crew,328.66393408669427
-Other,trawlers,2013,Number of crew,219.29158274759632
-Other,trawlers,2014,Number of crew,254.52133014184662
-Other,trawlers,2015,Number of crew,256.37639167225507
-Other,trawlers,2016,Number of crew,136.2355387114
-Other,trawlers,2017,Number of crew,27.3372544961
+Faroe Islands,trawlers,2014,Number of crew,23.840840020999998
+Japan,drifting_longlines,2012,Number of crew,2142.7718495005356
+Japan,drifting_longlines,2013,Number of crew,2542.531175516198
+Japan,drifting_longlines,2014,Number of crew,3034.335555912133
+Japan,drifting_longlines,2015,Number of crew,3748.7050341822905
+Japan,drifting_longlines,2016,Number of crew,1959.0387655571383
+Japan,drifting_longlines,2017,Number of crew,1298.0632962099032
+Japan,drifting_longlines,2018,Number of crew,355.9542859853191
+Other,drifting_longlines,2012,Number of crew,906.9892186120879
+Other,drifting_longlines,2013,Number of crew,1123.41567196552
+Other,drifting_longlines,2014,Number of crew,1048.6442278548784
+Other,drifting_longlines,2015,Number of crew,1177.921807126736
+Other,drifting_longlines,2016,Number of crew,540.9490036765806
+Other,drifting_longlines,2017,Number of crew,425.8189164457395
+Other,drifting_longlines,2018,Number of crew,71.29964782446667
+Other,squid_jigger,2012,Number of crew,296.21148451893555
+Other,squid_jigger,2013,Number of crew,279.359109346931
+Other,squid_jigger,2014,Number of crew,285.51354704005433
+Other,squid_jigger,2015,Number of crew,183.20249395357195
+Other,squid_jigger,2016,Number of crew,112.24924601213334
+Other,squid_jigger,2018,Number of crew,42.0433880705
+Other,trawlers,2012,Number of crew,507.5178481081163
+Other,trawlers,2013,Number of crew,157.57250881025172
+Other,trawlers,2014,Number of crew,144.79988598745715
+Other,trawlers,2015,Number of crew,167.95179410323846
+Other,trawlers,2016,Number of crew,167.95179410323846
+Other,trawlers,2017,Number of crew,60.15542514896346
+Other,trawlers,2018,Number of crew,31.71625539183846
 Portugal,trawlers,2012,Number of crew,150.37509640048856
 Portugal,trawlers,2013,Number of crew,96.67798842913855
 Portugal,trawlers,2014,Number of crew,152.92717058808992
 Portugal,trawlers,2015,Number of crew,217.9257604787499
-Portugal,trawlers,2016,Number of crew,276.0031347232848
-Portugal,trawlers,2017,Number of crew,239.30443370842977
-Portugal,trawlers,2018,Number of crew,68.4970100953409
-Russia,trawlers,2012,Number of crew,2243.1388990970886
-Russia,trawlers,2013,Number of crew,983.2629420961439
-Russia,trawlers,2014,Number of crew,1890.4540360497642
-Russia,trawlers,2015,Number of crew,731.2579284878971
-Russia,trawlers,2016,Number of crew,114.28908659961286
-Russia,trawlers,2017,Number of crew,37.97932110915714
+Portugal,trawlers,2016,Number of crew,249.4741016432681
+Portugal,trawlers,2017,Number of crew,207.7560925439116
+Portugal,trawlers,2018,Number of crew,32.38133744669091
+Russia,trawlers,2012,Number of crew,2796.6521672523377
+Russia,trawlers,2013,Number of crew,1551.924262683323
+Russia,trawlers,2014,Number of crew,1482.681654277387
+Russia,trawlers,2015,Number of crew,848.6398865007483
+Russia,trawlers,2016,Number of crew,151.54929454765286
 Seychelles,drifting_longlines,2012,Number of crew,26.28584775525
-Seychelles,drifting_longlines,2013,Number of crew,29.74817940419
-Seychelles,drifting_longlines,2014,Number of crew,135.4425673445428
-Seychelles,drifting_longlines,2015,Number of crew,406.08904605287745
-Seychelles,drifting_longlines,2016,Number of crew,631.9516471182008
-Seychelles,drifting_longlines,2017,Number of crew,711.0710010823051
-Seychelles,drifting_longlines,2018,Number of crew,728.219779453774
+Seychelles,drifting_longlines,2013,Number of crew,58.25807119029
+Seychelles,drifting_longlines,2014,Number of crew,163.31041164564277
+Seychelles,drifting_longlines,2015,Number of crew,377.51729094220246
+Seychelles,drifting_longlines,2016,Number of crew,604.0838028171008
+Seychelles,drifting_longlines,2017,Number of crew,770.7369882919801
+Seychelles,drifting_longlines,2018,Number of crew,683.1922770008697
 South Korea,drifting_longlines,2012,Number of crew,3398.624371843682
-South Korea,drifting_longlines,2013,Number of crew,3083.927286166449
-South Korea,drifting_longlines,2014,Number of crew,2825.349152731087
-South Korea,drifting_longlines,2015,Number of crew,2657.520035447516
-South Korea,drifting_longlines,2016,Number of crew,2748.1625372552285
-South Korea,drifting_longlines,2017,Number of crew,2401.120528387374
-South Korea,drifting_longlines,2018,Number of crew,474.695588074925
-South Korea,squid_jigger,2012,Number of crew,1073.9596531814952
-South Korea,squid_jigger,2013,Number of crew,675.9462016301826
-South Korea,squid_jigger,2014,Number of crew,995.5982037154562
-South Korea,squid_jigger,2015,Number of crew,966.3442734532679
-South Korea,squid_jigger,2016,Number of crew,686.0302366215885
-South Korea,squid_jigger,2017,Number of crew,193.89224598852786
-South Korea,trawlers,2012,Number of crew,523.6768092073049
+South Korea,drifting_longlines,2013,Number of crew,3059.456243441482
+South Korea,drifting_longlines,2014,Number of crew,2850.349152731087
+South Korea,drifting_longlines,2015,Number of crew,2641.3499431126784
+South Korea,drifting_longlines,2016,Number of crew,2626.408772504366
+South Korea,drifting_longlines,2017,Number of crew,1877.956784646045
+South Korea,drifting_longlines,2018,Number of crew,150
+South Korea,squid_jigger,2012,Number of crew,1219.765476588325
+South Korea,squid_jigger,2013,Number of crew,1212.3234773104416
+South Korea,squid_jigger,2014,Number of crew,1226.0074604147587
+South Korea,squid_jigger,2015,Number of crew,1126.1137513345907
+South Korea,squid_jigger,2016,Number of crew,1146.1711119056615
+South Korea,squid_jigger,2017,Number of crew,418.5763391090991
+South Korea,trawlers,2012,Number of crew,393.57092590071204
 South Korea,trawlers,2013,Number of crew,327.21615998471907
-South Korea,trawlers,2014,Number of crew,374.3104686874835
-South Korea,trawlers,2015,Number of crew,275.5589278539597
+South Korea,trawlers,2014,Number of crew,425.6429523554835
+South Korea,trawlers,2015,Number of crew,205.2923427262103
 South Korea,trawlers,2016,Number of crew,84.32618075814221
-Spain,trawlers,2012,Number of crew,315.5988156705822
-Spain,trawlers,2013,Number of crew,348.6507532816087
-Spain,trawlers,2014,Number of crew,357.23213802312574
-Spain,trawlers,2015,Number of crew,212.05328567238496
-Spain,trawlers,2016,Number of crew,196.75644086135165
+Spain,trawlers,2012,Number of crew,328.34264738885605
+Spain,trawlers,2013,Number of crew,562.6619698769005
+Spain,trawlers,2014,Number of crew,363.56707879961857
+Spain,trawlers,2015,Number of crew,231.54561018950997
+Spain,trawlers,2016,Number of crew,179.7389028204151
 Spain,trawlers,2017,Number of crew,110.28227366576382
-Taiwan,drifting_longlines,2012,Number of crew,355.69798598084043
-Taiwan,drifting_longlines,2013,Number of crew,1705.4855379330654
-Taiwan,drifting_longlines,2014,Number of crew,3532.7574074195654
-Taiwan,drifting_longlines,2015,Number of crew,6452.148468131342
-Taiwan,drifting_longlines,2016,Number of crew,7566.350268504553
-Taiwan,drifting_longlines,2017,Number of crew,9187.932160627279
-Taiwan,drifting_longlines,2018,Number of crew,6838.54673928743
-Taiwan,squid_jigger,2012,Number of crew,2375.215602072201
-Taiwan,squid_jigger,2013,Number of crew,2530.8954234636176
-Taiwan,squid_jigger,2014,Number of crew,1877.0802829109157
-Taiwan,squid_jigger,2015,Number of crew,2285.7762399105845
-Taiwan,squid_jigger,2016,Number of crew,430.9794545991025
-Taiwan,squid_jigger,2017,Number of crew,175.41502497025166
+Taiwan,drifting_longlines,2012,Number of crew,369.69798598084043
+Taiwan,drifting_longlines,2013,Number of crew,1722.5508116018977
+Taiwan,drifting_longlines,2014,Number of crew,3439.3769106108352
+Taiwan,drifting_longlines,2015,Number of crew,6358.85894969402
+Taiwan,drifting_longlines,2016,Number of crew,7114.9273361665155
+Taiwan,drifting_longlines,2017,Number of crew,7967.572312135174
+Taiwan,drifting_longlines,2018,Number of crew,4564.304277103218
+Taiwan,squid_jigger,2012,Number of crew,2678.1055468621457
+Taiwan,squid_jigger,2013,Number of crew,2961.278485119081
+Taiwan,squid_jigger,2014,Number of crew,2567.3706338844036
+Taiwan,squid_jigger,2015,Number of crew,2638.9215756806398
+Taiwan,squid_jigger,2016,Number of crew,935.0798407436602
+Taiwan,squid_jigger,2017,Number of crew,270.3989351702557
 Vanuatu,drifting_longlines,2012,Number of crew,26.509960422633334
 Vanuatu,drifting_longlines,2013,Number of crew,26.509960422633334
 Vanuatu,drifting_longlines,2014,Number of crew,284.44672168899
-Vanuatu,drifting_longlines,2015,Number of crew,767.06470644844
-Vanuatu,drifting_longlines,2016,Number of crew,938.1428724054933
-Vanuatu,drifting_longlines,2017,Number of crew,995.24657992231
-Vanuatu,drifting_longlines,2018,Number of crew,555.40710119875
+Vanuatu,drifting_longlines,2015,Number of crew,756.06470644844
+Vanuatu,drifting_longlines,2016,Number of crew,909.1970051064534
+Vanuatu,drifting_longlines,2017,Number of crew,830.30071262327
+Vanuatu,drifting_longlines,2018,Number of crew,293.7465716314
