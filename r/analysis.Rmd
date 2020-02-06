@@ -284,10 +284,13 @@ ggsave(here::here("output_figures/fig_s2.png"),cv_performance_fig,width=7.5,heig
 # Random forest has lowest standard deviation for modified f1, and has a higher recall
 optimized_model <- tibble(model_type = "random-forest",
                           bagging = TRUE,
-                          under_ratio = 1)
+                          under_ratio = 1,
+                          number_bags = 5)
 
-cv_performance <- performance %>% 
-  inner_join(optimized_model,by = c("model_type", "bagging", "under_ratio"))
+cv_performance <- bag_performance %>% 
+  mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
+  inner_join(optimized_model,by = c("model_type", "number_bags", "under_ratio")) %>%
+  filter(.metric == "modified_f1")
 
 optimized_model$.threshold <- cv_performance$.threshold[1]
 ```
@@ -296,11 +299,8 @@ optimized_model$.threshold <- cv_performance$.threshold[1]
 # Train final model on full dataset
 tic()
 # Define all model runs
-model_runs_final <-crossing(under_ratio_vec,
-                            bag_vec) %>%
-  mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
-  # Don't need to bag if not doing downsampling
-  filter(!(!bagging & bag >1)) %>%
+model_runs_final <- optimized_model %>%
+  crossing(tibble(bag = seq(optimized_model$bagging))) %>%
   # Want different seed each time downsampling is done, for bagging
   mutate(seed = sample.int(10^5,n())) %>%
   mutate(recipe = map2(seed,bagging,function(x,y){
@@ -311,10 +311,6 @@ model_runs_final <-crossing(under_ratio_vec,
              step_downsample("offender",under_ratio=y,seed=x,skip=TRUE))
     return(tmp_recipe)
   })) %>%
-  # Now build models for all hyperparameters
-  crossing(model_type_vec) %>%
-  # Only do optimized moel
-  inner_join(optimized_model,by=c("model_type","bagging","under_ratio")) %>%
   # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
   mutate(workflow = map2(recipe,model_type,function(x,y){
     # Add either random forest or svm to worflow, along with appropriate recipe
@@ -348,7 +344,6 @@ saveRDS(predictions_final,paste0(data_directory,"/predictions_final.Rdata"))
 
 ```{r}
 predictions_final <- readRDS(paste0(data_directory,"/predictions_final.Rdata"))
-
 
 predictions_figures <- predictions_final %>%
   dplyr::select (predict)%>%
@@ -407,6 +402,7 @@ importance_fig <- predictions_final %>%
                                     Feature == "gear_trawlers" ~ "Trawler",
                                     Feature == "ais_type_A" ~ "AIS device type A",
                                     Feature == "ais_type_B" ~ "AIS device type B",
+                                    Feature == "flag_other" ~ "Flag: Other",
                                     str_detect(Feature,"year") ~ paste0("Year: ", str_extract(Feature,"(\\d)+")),
                                     str_detect(Feature,"flag") ~ paste0("Flag: ", countrycode(word(Feature, 2, sep = "_"),"iso3c","country.name")),
                                     TRUE ~ indicator_name)) %>%
