@@ -1002,6 +1002,25 @@ correct_positives <- predictions_figures %>%
 fraction_correct_positives <- correct_positives / (predictions_figures %>%
   filter( Label == "Positive") %>%
   nrow())
+
+riskiest_fleets <- predictions_figures  %>%
+  filter(fishing_hours > 0) %>%
+  filter(class == 1) %>%
+  left_join(flag_predictions_other,by=c("Country","gear")) %>%
+  mutate(Country = ifelse(Other,"Other",Country))%>%
+  group_by(mmsi,Country,gear,year) %>%
+  summarize(crew_size = mean(crew_size)) %>%
+  ungroup() %>%
+  group_by(Country,gear) %>%
+  summarize(`Number of vessels` = n(),
+            `Number of crew` = sum(crew_size)) %>%
+  ungroup() %>%
+  gather("indicator","count",-gear,-Country) %>%
+  mutate(indicator = fct_relevel(indicator,c("Number of vessels","Number of crew"))) %>%
+  filter(indicator == "Number of vessels") %>%
+  arrange(desc(count)) %>%
+  slice(1:5)
+
 ```
 
 # Greenpeace verification
