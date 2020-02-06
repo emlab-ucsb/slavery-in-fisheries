@@ -122,7 +122,7 @@ cv_splits <- group_vfold_cv(training_df,
 # NA means no downsampling, so just the regular base classifier
 under_ratio_vec <- tibble(under_ratio = c(NA,seq(1,5)))
 # Number of bags
-bag_vec <- tibble(bag = seq(5))
+bag_vec <- tibble(bag = seq(10))
 # Different models to try
 model_type_vec <- tibble(model_type = c("random-forest","svm"))
 tic()
@@ -194,69 +194,7 @@ write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions.csv"))
 
 ```{r}
 # Load cached predictions
-predictions <- read_csv(paste0(data_directory,"/tidy_cv_predictions.csv")) %>%
-  # Make offender =1 reference level
-  mutate(offender = relevel(as.factor(offender),"1"))
-```
-
-```{r  eval = FALSE}
-tic()
-performance <- predictions %>%
-  # For each fold and hyperparameter set, take average prediction for each vessel-year (mmsi and year) across bags
-  group_by(id,model_type,bagging,under_ratio,mmsi,year) %>%
-  summarize(offender = offender[1],
-            .pred_1 = mean(.pred_1,na.rm=TRUE)) %>%
-  ungroup() %>%
-  # Then we will calculate performance metrics, by threshold, for each fold and hyperparameter set
-  group_by(id,model_type,bagging,under_ratio) %>%
-  nest() %>%
-  ungroup() %>%
-  # Calculated metrics will include recall, modified_f1, and detection_prevalence
-  mutate(threshold_perf = map(data,~threshold_perf_custom(.x,
-                                                  truth = offender,
-                                                  estimate = .pred_1,
-               thresholds=seq(0.01,0.99,0.01)))) %>%
-  dplyr::select(-data) %>%
-  unnest(threshold_perf) %>%
-  # Now for each hyperparameter set, we will take the average performance across all folds
-  group_by(model_type,bagging,under_ratio,.threshold,.metric) %>%
-  summarize(mean_performance = mean(.estimate,na.rm=TRUE),
-            sd_performance = sd(.estimate,na.rm=TRUE)) %>%
-  ungroup() %>%
-  group_by(model_type,bagging,under_ratio) %>%
-  nest() %>%
-  ungroup() %>%
-  # Now we will find the optimial threshold for maximizing the modified F1 estimator
-  # Maximize the mean
-  mutate(optimal_threshold = map_dbl(data,~.x %>%
-                                   filter(.metric=="modified_f1") %>%
-                                   arrange(desc(mean_performance)) %>%
-                                             slice(1) %>%
-                                             .$.threshold),
-         # optimized_metrics will contain metrics with optimized modified F1 estimator
-         optimized_metrics = map2(data,optimal_threshold,~.x %>%
-                                    filter(.threshold==.y))) %>% 
-  unnest(optimized_metrics) %>%
-  dplyr::select(-optimal_threshold,-data)
-toc()
-# Save performance estimates for later
-write_csv(performance,paste0(data_directory,"/tidy_cv_performance.csv"))
-```
-
-```{r}
-# Read cached performance
-performance <- read_csv(paste0(data_directory,"/tidy_cv_performance.csv"))
-performance %>%
-  mutate(error_min = pmax(mean_performance-sd_performance,0),
-         error_max = ifelse(.metric=="recall",pmin(mean_performance+sd_performance,1),mean_performance+sd_performance)) %>%
-  mutate(under_ratio = ifelse(is.na(under_ratio),0,under_ratio)) %>%
-  filter(.metric %in% c("recall","modified_f1")) %>% 
-  ggplot(aes(x = factor(under_ratio),y=mean_performance,color=model_type)) + 
-  geom_point(position=position_dodge(width=0.5)) +
-  geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.5),width=0.5) + 
-  facet_grid(.metric~.,scales="free") +
-  theme_bw()
-
+predictions <- read_csv(paste0(data_directory,"/tidy_cv_predictions.csv"))
 ```
 
 ```{r eval = FALSE}
@@ -267,7 +205,9 @@ bag_performance <- map_df(bag_vec$bag,function(x){
     group_by(id,model_type,under_ratio,mmsi,year) %>%
     summarize(offender = offender[1],
               .pred_1 = mean(.pred_1,na.rm=TRUE)) %>%
-    ungroup() %>%
+    ungroup()  %>%
+  # Make offender =1 reference level
+  mutate(offender = relevel(as.factor(offender),"1")) %>%
     # Then we will calculate performance metrics, by threshold, for each fold and hyperparameter set
     group_by(id,model_type,under_ratio) %>%
     nest() %>%
@@ -312,9 +252,11 @@ write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance.csv"))
 bag_performance <- read_csv(paste0(data_directory,"/tidy_cv_bag_performance.csv"))
 cv_performance_fig <- bag_performance %>%
   filter(!is.na(under_ratio) | number_bags ==1) %>%
-  mutate(number_bags = paste0("Number bags: ",number_bags)) %>%
+  filter(number_bags <= 5) %>%
+  mutate(number_bags = paste0("Bags: ",number_bags)) %>%
+  mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
+           fct_relevel("B")) %>%
   mutate(model_type=ifelse(model_type=="random-forest","Random forest","Support vector\nmachine")) %>%
-  mutate(under_ratio = ifelse(is.na(under_ratio),"",under_ratio))  %>% 
   mutate(error_min = pmax(mean_performance-sd_performance,0),
          error_max = ifelse(.metric=="recall",pmin(mean_performance+sd_performance,1),mean_performance+sd_performance)) %>%
 #  filter(.metric %in% c("recall","modified_f1")) %>% 
