@@ -246,6 +246,7 @@ bag_performance <- map_df(bag_vec$bag,function(x){
 })
 # Save bag performance estimates for later
 write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance.csv"))
+write_csv(bag_performance,here::here("interim_data/figure_s2_data.csv"))
 ```
 
 ```{r}
@@ -341,12 +342,7 @@ predictions_final <- model_runs_final %>%
 toc()
 
 saveRDS(predictions_final,paste0(data_directory,"/predictions_final.Rdata"))
-```
 
-# Make figures
-
-```{r}
-predictions_final <- readRDS(paste0(data_directory,"/predictions_final.Rdata"))
 as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
 predictions_figures <- predictions_final %>%
   dplyr::select (predict)%>%
@@ -371,13 +367,20 @@ predictions_figures <- predictions_final %>%
   mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
   mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
 
+# Save final predictions
+write_csv(predictions_figures,here::here("interim_data/final_model_predictions.csv"))
+
+
 # Do google checks
+# Check 50 vessels with highest risk score
+# Found 1 new forced labor vessel during search
 check_positive <- predictions_figures %>% 
   filter(class == 1 & offender ==0) %>% 
   arrange(desc(.pred_1)) %>% 
   dplyr::select(mmsi,.pred_1,year) %>%
   slice(1:50)
 set.seed(101)
+# Check 50 vessels at random that were classified as low-risk
 check_negative <- predictions_figures %>% 
   filter(offender ==0) %>% 
   dplyr::select(mmsi,.pred_1,year) %>% 
@@ -385,12 +388,12 @@ check_negative <- predictions_figures %>%
 
 write_csv(check_positive,here::here("interim_data/check_positive.csv"))
 write_csv(check_negative,here::here("interim_data/check_negative.csv"))
-```
 
-## Variable importance
-```{r}
 vessel_lookup <- read_csv(here::here("raw_data/indicator_lookup.csv"))
-importance_fig <- predictions_final %>%
+
+# Get average variable importance across bags
+
+importance_data <- predictions_final %>%
   mutate(var_imp = map(fit,function(x){
     x$fit$fit$fit$variable.importance%>%
           as.data.frame() %>%
@@ -412,7 +415,20 @@ importance_fig <- predictions_final %>%
                                     Feature == "flag_other" ~ "Flag: Other",
                                     str_detect(Feature,"year") ~ paste0("Year: ", str_extract(Feature,"(\\d)+")),
                                     str_detect(Feature,"flag") ~ paste0("Flag: ", countrycode(word(Feature, 2, sep = "_"),"iso3c","country.name")),
-                                    TRUE ~ indicator_name)) %>%
+                                    TRUE ~ indicator_name)) 
+# Save data for figure 4
+write_csv(importance_data,here::here("interim_data/figure_s4_data.csv"))
+```
+
+# Make figures
+
+```{r}
+predictions_figures <- reead_csv(here::here("interim_data/final_model_predictions.csv"))
+```
+
+## Variable importance
+```{r}
+importance_fig <- read_csv(here::here("interim_data/figure_s4_data.csv")) %>%
   ggplot(aes(x = reorder(indicator_name,Importance), y = Importance)) +
   geom_bar(stat = "identity",color="black") +
   coord_flip() +
@@ -495,7 +511,7 @@ crew_vessels_fig_data <- predictions_figures  %>%
   gather("indicator","count",-gear,-Country,-year) %>%
   mutate(indicator = fct_relevel(indicator,c("Number of vessels","Number of crew")))
 
-write_csv(crew_vessels_fig_data,here::here("interim_data/crew_vessels_fig_data_fig_2.csv"))
+write_csv(crew_vessels_fig_data,here::here("interim_data/figure_2_data.csv"))
 crew_vessels_fig <- crew_vessels_fig_data %>%
   mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
                           gear=="squid_jigger" ~ "Squid jigger",
@@ -539,7 +555,7 @@ asinh_trans <- function(){
             inverse = function(x) sinh(x))
 }
 
-indicator_figure <- recipes::recipe(offender ~ ., data = head(training_df_figure)) %>%
+indicator_figure_data <- recipes::recipe(offender ~ ., data = head(training_df_figure)) %>%
   recipes::update_role(mmsi, new_role = "id variable") %>%
   recipes::update_role(gear, new_role = "id variable") %>%
   # Box-Cox transformation on all numeric
@@ -552,7 +568,9 @@ indicator_figure <- recipes::recipe(offender ~ ., data = head(training_df_figure
                           gear=="squid_jigger" ~ "Squid jigger",
                           TRUE ~ "Trawler")) %>%
     left_join(vessel_lookup,by="indicator") %>%
-  mutate(offender=ifelse(offender==1,"Positive","Unlabeled")) %>%
+  mutate(offender=ifelse(offender==1,"Positive","Unlabeled")) 
+
+indicator_figure <- indicator_figure_data %>%
   ggplot(aes(x = reorder(indicator_name,value),y=value,color=factor(offender))) +
   geom_boxplot(position=position_dodge(width=1),outlier.size = 0.1) +
   disco::scale_color_disco(palette = "vibrant", "Training data label",direction=1,alpha=1,
@@ -742,20 +760,17 @@ GROUP BY
 grouped_messages <- bq_project_query(gfw_project, sql) %>%
   bq_table_download(max_results = Inf)
 
-write_csv(grouped_messages,path=here::here("interim_data/grouped_messages.csv"))
 write_csv(grouped_messages %>%
             filter(year==2018) %>%
             dplyr::select(-known_offender_fishing_kW_hours,
-                  -fraction_known_offender_fishing_kW_hours) ,path=here::here("interim_data//spatial_fishing_risk_fig_3.csv"))
+                  -fraction_known_offender_fishing_kW_hours) ,path=here::here("interim_data/figure_3_data.csv"))
 ```
 
 ```{r}
-grouped_messages <- read.csv(here::here("interim_data/grouped_messages.csv")) %>%
-  filter(year == 2018)
+grouped_messages <- read.csv(here::here("interim_data/figure_3_data.csv"))
 
 world_land <- rworldmap::getMap(resolution = "low") %>%
   st_as_sf()
-
 
 map_palette <- "inferno"
 map_palette_begin <- 0.2
@@ -909,15 +924,13 @@ sql <- "SELECT *
 port_data <- bq_project_query(gfw_project, sql) %>%
   bq_table_download(max_results = Inf)
 
-write_csv(port_data,here::here("interim_data/port_data.csv"))
 write_csv(port_data %>%
-            filter(year==2018),path=here::here("interim_data/port_risk_fig_4.csv"))
+            filter(year==2018),path=here::here("interim_data/figure_4_data.csv"))
 ```
 
 ```{r}
-port_data <- read_csv(here::here("interim_data/port_data.csv")) %>%
-  filter(year == 2018,
-         !is.na(port_iso3))
+port_data <- read_csv(here::here("interim_data/figure_4_data.csv")) %>%
+  filter(!is.na(port_iso3))
 
 world_land_ports <- world_land %>% 
   as_tibble() %>%
