@@ -292,8 +292,7 @@ optimized_model <- tibble(model_type = "random-forest",
 
 cv_performance <- bag_performance %>% 
   mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
-  inner_join(optimized_model,by = c("model_type", "number_bags", "under_ratio")) %>%
-  filter(.metric == "modified_f1")
+  inner_join(optimized_model,by = c("model_type", "number_bags", "under_ratio"))
 
 optimized_model$.threshold <- cv_performance$.threshold[1]
 ```
