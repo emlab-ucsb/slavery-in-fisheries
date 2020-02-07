@@ -433,7 +433,7 @@ importance_fig <- read_csv(here::here("interim_data/s8_figure_s4_data.csv")) %>%
   ggplot(aes(x = reorder(indicator_name,Importance), y = Importance)) +
   geom_bar(stat = "identity",color="black") +
   coord_flip() +
-  labs(x = "Feature",
+  labs(x = "",
        y = "Mean importance across bags") +
   theme_bw()
 
@@ -600,7 +600,7 @@ indicator_figure <- indicator_figure_data %>%
   scale_y_continuous(trans="asinh",breaks = scales::pretty_breaks(2)) +
     labs(
       x = "",
-      y = "Box-Cox transformed, centered, and scaled\nindicator vales (inverse hyperbolic sin scale)"
+      y = "Box-Cox transformed, centered, and scaled\n vales (inverse hyperbolic sin scale)"
     ) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1,size=8),
