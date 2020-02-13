@@ -600,7 +600,7 @@ indicator_figure <- indicator_figure_data %>%
   scale_y_continuous(trans="asinh",breaks = scales::pretty_breaks(2)) +
     labs(
       x = "",
-      y = "Box-Cox transformed, centered, and scaled\n vales (inverse hyperbolic sin scale)"
+      y = "Box-Cox transformed, centered, and scaled\n vales (inverse hyperbolic sine scale)"
     ) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1,size=8),
