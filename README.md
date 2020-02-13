@@ -18,7 +18,6 @@ slavery-in-fisheries
   |__ interim_data
   |__ output_figures
   |__ r
-  |__ output_tables
 ```
 
 ## Software
