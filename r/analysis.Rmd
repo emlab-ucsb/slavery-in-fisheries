@@ -271,13 +271,13 @@ cv_performance_fig <- bag_performance %>%
   ggplot(aes(x = factor(under_ratio),y=mean_performance,color=model_type)) + 
   geom_point(position=position_dodge(width=0.75)) +
   geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.75),width=0.5) + 
-  facet_grid(.metric~number_bags,scales="free") +
+  facet_grid(.metric~number_bags,scales="free_y",switch="y") +
   labs(x = "Downsampling ratio",
        y = "Mean\nacross\nfolds")+ 
   theme_bw() +
   theme(strip.background =element_rect(fill=NA),
         axis.title.y = element_text(angle=0,vjust=0.5),
-        strip.text.y = element_text(angle=0,vjust=0.5)) +
+        strip.text.y.left = element_text(angle=0,vjust=0.5)) +
   disco::scale_color_disco("Model type")
 
 cv_performance_fig
@@ -423,7 +423,8 @@ importance_fig <- read_csv(here::here("interim_data/s8_figure_s5_data.csv")) %>%
   coord_flip() +
   labs(x = "",
        y = "Mean importance across bags") +
-  theme_bw()
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
 
 importance_fig
 
@@ -511,7 +512,8 @@ vessels_fig_total <- predictions_figures  %>%
   scale_y_continuous(labels=scales::comma)+ 
   scale_x_continuous(breaks = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
-        axis.text.x = element_text(angle = 45, hjust = 1))
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.minor = element_blank())
 
 vessels_fig_percentage <- predictions_figures %>%
   group_by(year,gear) %>%
@@ -527,7 +529,8 @@ vessels_fig_percentage <- predictions_figures %>%
   scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
   scale_x_continuous(breaks = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
-        axis.text.x = element_text(angle = 45, hjust = 1))+
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.minor = element_blank())+
   labs(x="",title="Percentage of total vessels that are high-risk",y="")
 
 legend <- get_legend(
@@ -541,7 +544,7 @@ vessels_fig <- cowplot::plot_grid(plot_grid(vessels_fig_total+ theme(legend.posi
                              ncol = 1),
                    legend,
                    ncol=2,
-                   rel_widths = c(3,1))  
+                   rel_widths = c(4,1))  
 
 ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,device="png",dpi=300)
 ```
@@ -609,7 +612,7 @@ ggsave(here::here("output_figures/figure_1.png"),indicator_figure,width=8,height
 
 ```{r}
 training_dataset_fig <- training_df  %>%
-  mutate(offender = ifelse(offender==1,"Positive vessel years","Unlabeled vessel years")) %>%
+  mutate(offender = ifelse(offender==1,"Number of positive vessel-years","Number of unlabeled vessel-years")) %>%
   mutate(Country = countrycode(flag,"iso3c","country.name")) %>%
   group_by(gear,offender,year) %>% 
   summarize(count=n()) %>% 
@@ -623,7 +626,7 @@ training_dataset_fig <- training_df  %>%
   facet_wrap(offender~.,scales="free_y",ncol=1)+
   disco::scale_fill_disco(palette = "bright", "Gear") +
   theme_bw() +
-  labs(x="Year",y="")+
+  labs(x="",y="")+
   scale_y_continuous(labels=scales::comma_format(accuracy=1))+ 
   theme(strip.background =element_rect(fill=NA,
                                        color = NA),
