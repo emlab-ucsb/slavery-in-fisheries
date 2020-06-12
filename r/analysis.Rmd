@@ -256,7 +256,6 @@ write_csv(bag_performance,here::here("interim_data/s7_figure_s3_data.csv"))
 bag_performance <- read_csv(here::here("interim_data/s7_figure_s3_data.csv"))
 cv_performance_fig <- bag_performance %>%
   filter(!is.na(under_ratio) | number_bags ==1) %>%
-  filter(number_bags %in% bags_to_show) %>%
   mutate(number_bags = paste0("Bags: ",number_bags) %>%
            fct_relevel(paste0("Bags: ",bags_to_show))) %>%
   mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
@@ -267,16 +266,18 @@ cv_performance_fig <- bag_performance %>%
 #  filter(.metric %in% c("recall","modified_f1")) %>% 
     mutate(.metric = case_when(.metric=="recall"~"Recall",
                                .metric=="modified_f1"~"Modified F1",
-                               TRUE~"Detection prevalence")) %>%
-  mutate(.metric = fct_relevel(.metric,"Recall","Detection prevalence")) %>%
+                               TRUE~"Detection\nprevalence")) %>%
+  mutate(.metric = fct_relevel(.metric,"Recall","Detection\nprevalence")) %>%
   ggplot(aes(x = factor(under_ratio),y=mean_performance,color=model_type)) + 
   geom_point(position=position_dodge(width=0.75)) +
   geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.75),width=0.5) + 
   facet_grid(.metric~number_bags,scales="free") +
   labs(x = "Downsampling ratio",
-       y = "Mean across folds\n+/- 1 standard deviation")+ 
+       y = "Mean\nacross\nfolds")+ 
   theme_bw() +
-  theme(strip.background =element_rect(fill=NA)) +
+  theme(strip.background =element_rect(fill=NA),
+        axis.title.y = element_text(angle=0,vjust=0.5),
+        strip.text.y = element_text(angle=0,vjust=0.5)) +
   disco::scale_color_disco("Model type")
 
 cv_performance_fig
@@ -442,12 +443,13 @@ class_fig <- predictions_figures  %>%
   coord_flip() + 
   geom_hline(yintercept = optimized_model$.threshold,linetype=2) +
   labs(y = "Model risk score",
-       x = "Model classification")+
+       x = "Model\nclassification")+
     stat_summary(fun.data = n_fun, geom = "label",position = position_dodge(width = 0.75),show.legend = FALSE) +
   ylim(c(0,1)) +
   disco::scale_fill_disco(palette = "vibrant", "Training data\nlabel",direction=1,alpha=1,
                            guide = guide_legend(reverse = TRUE) ) +
-  theme_bw()
+  theme_bw() +
+  theme(axis.title.y = element_text(angle=0,vjust=0.5))
 
 class_fig
 
@@ -502,13 +504,14 @@ vessels_fig_total <- predictions_figures  %>%
   ggplot(aes(x = year, y = `Number of vessels`, fill = Country)) +
   geom_bar(stat = "identity", color = "black",size=0.25) +
   #coord_flip() +
-  labs(x="",y="Number of\nhigh-risk vessels") +
+  labs(x="",title="Number of high-risk vessels",y="") +
   theme_bw() +
   disco::scale_fill_disco(palette = "rainbow", "Flag") +
   facet_grid(.~gear)+
   scale_y_continuous(labels=scales::comma)+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
-        axis.text.x = element_text(angle = 90, hjust = 1))
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 vessels_fig_percentage <- predictions_figures %>%
   group_by(year,gear) %>%
@@ -522,9 +525,10 @@ vessels_fig_percentage <- predictions_figures %>%
   facet_grid(.~gear) +
   theme_bw()+
   scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
-        axis.text.x = element_text(angle = 90, hjust = 1))+
-  labs(x="",y="Percentage of total vessels\nthat are high-risk")
+        axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(x="",title="Percentage of total vessels that are high-risk",y="")
 
 legend <- get_legend(
   # create some space to the left of the legend
@@ -619,9 +623,10 @@ training_dataset_fig <- training_df  %>%
   facet_wrap(.~offender,scales="free",ncol=1)+
   disco::scale_fill_disco(palette = "bright", "Gear") +
   theme_bw() +
-  labs(x="Year",y="Number of vessel-years")+
+  labs(x="Year",y="Number of\nvessel-years")+
   scale_y_continuous(labels=scales::comma)+ 
-  theme(strip.background =element_rect(fill=NA))
+  theme(strip.background =element_rect(fill=NA),
+        axis.title.y = element_text(angle=0,vjust=0.5))
 
 training_dataset_fig
 
