@@ -124,21 +124,30 @@ cv_splits <- group_vfold_cv(training_df,
 # NA means no downsampling, so just the regular base classifier
 under_ratio_vec <- tibble(under_ratio = c(NA,seq(1,5)))
 # Number of bags
-bag_vec <- tibble(bag = seq(10))
+bag_vec <- tibble(bag = seq(100))
 # Different models to try
 model_type_vec <- tibble(model_type = c("random-forest","svm"))
-tic()
-# Define all model runs
-model_runs <-cv_splits %>%
-  # For each CV fold, try different downsampling ratios if bagging
-  # Also perform a number of bags
-  crossing(under_ratio_vec,
+
+analysis_data <- cv_splits %>%
+  mutate(# Create analysis dataset based on CV folds
+    analysis = map(splits,~analysis(.x)),
+    # Create assessment dataset based on CV folds
+    assessment = map(splits,~assessment(.x))) %>%
+  dplyr::select(-splits)
+
+model_runs <- crossing(under_ratio_vec,
+                       model_type_vec,
            bag_vec) %>%
+  # If there's no downsampling, there's no bagging
   mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
   # Don't need to bag if not doing downsampling
   filter(!(!bagging & bag >1)) %>%
   # Want different seed each time downsampling is done, for bagging
-  mutate(seed = sample.int(10^5,n())) %>%
+  mutate(seed = sample.int(10^5,n()))
+
+pb <- progress_estimated(nrow(model_runs) * nrow(cv_splits))
+
+predictions <- model_runs %>%
   mutate(recipe = map2(seed,bagging,function(x,y){
     # Add downsampling to pre-processing recipe if bagging
     ifelse(!y,
@@ -146,52 +155,43 @@ model_runs <-cv_splits %>%
            tmp_recipe <- fl_rec %>%
              step_downsample("offender",under_ratio=y,seed=x,skip=TRUE))
     return(tmp_recipe)
+    # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
   }),
-  # Create analysis dataset based on CV folds
-  analysis = map(splits,~analysis(.x)),
-   # Create assessment dataset based on CV folds
-  assessment = map(splits,~assessment(.x))) %>%
-  # Now build models for all hyperparameters
-  crossing(model_type_vec) %>%
-  # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
-  mutate(workflow = map2(recipe,model_type,function(x,y){
+  workflow = map2(recipe,model_type,function(x,y){
     # Add either random forest or svm to worflow, along with appropriate recipe
     ifelse(y == "random-forest",
            tmp_workflow <- workflow() %>%
-                           add_model(rf_mod) %>%
-                           add_recipe(x),
+             add_model(rf_mod) %>%
+             add_recipe(x),
            tmp_workflow <- workflow() %>%
-                           add_model(svm_mod) %>%
-                           add_recipe(x))
+             add_model(svm_mod) %>%
+             add_recipe(x))
     return(tmp_workflow)
   })) %>%
-  # No longer need these columns
-  dplyr::select(-splits,-recipe)
-toc()
-# Initialize progress bar
-pb <- progress_estimated(nrow(model_runs))
-
-tic()
-# Make predictions for all model runs
-predictions <- model_runs %>%
-  mutate(predict = pmap(list(x=workflow,y=analysis,z=assessment),function(x,y,z){
-     # Fit analysis data using workflow
-    tmp <- fit(x,y) %>%
-      # Predict assessment data using fit
-      predict(z, type = "prob") %>%
-      # Add predictions to assessment data
-      bind_cols(z) %>%
-      # Select relevant columns
-      dplyr::select(mmsi,year,offender,.pred_1)
-    # Increment progress bar
-    pb$tick()$print()
-    return(tmp)})) %>%
-  # Select relevant columns
-  dplyr::select(id,model_type,bagging,under_ratio,bag,predict) %>%
+  # Remove unnecessary columns
+  dplyr::select(-seed,-recipe) %>%
+  # For each workflow, do entire model fitting process across all folds
+  mutate(predict = map(workflow,function(x){
+    analysis_data %>%
+      mutate(predict = map2(analysis,assessment,function(y,z){
+        tmp <- fit(x,y) %>%
+          # Predict assessment data using fit
+          predict(z, type = "prob") %>%
+          # Add predictions to assessment data
+          bind_cols(z) %>%
+          # Select relevant columns
+          dplyr::select(mmsi,year,offender,.pred_1)
+        # Increment progress bar
+        pb$tick()$print()
+        return(tmp)
+      })) %>%
+      dplyr::select(id,predict) %>%
+      unnest(predict)
+  })) %>%
+  dplyr::select(-workflow) %>%
   unnest(predict)
-toc()
-# Save CV predictions
-write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions.csv"))
+
+write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions_100.csv"))
 ```
 
 ```{r}
@@ -200,7 +200,8 @@ predictions <- read_csv(paste0(data_directory,"/tidy_cv_predictions.csv"))
 ```
 
 ```{r eval = FALSE}
-bag_performance <- map_df(bag_vec$bag,function(x){
+bags_to_show <- c(1,10,50,100)
+bag_performance <- map_df(bags_to_show,function(x){
   tmp_performance <- predictions %>%
     filter(bag<=x) %>%
     # For each fold and hyperparameter set, take average prediction for each vessel-year (mmsi and year) across bags
@@ -246,14 +247,13 @@ bag_performance <- map_df(bag_vec$bag,function(x){
   tmp_performance
 })
 # Save bag performance estimates for later
-write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance.csv"))
-write_csv(bag_performance,here::here("interim_data/s7_figure_s2_data.csv"))
+write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance_100.csv"))
+write_csv(bag_performance,here::here("interim_data/s7_figure_s3_data.csv"))
 ```
 
 ```{r}
 # Read in cached bag performance
-bag_performance <- read_csv(here::here("interim_data/s7_figure_s2_data.csv"))
-bags_to_show <- c(1,3,5,7,10)
+bag_performance <- read_csv(here::here("interim_data/s7_figure_s3_data.csv"))
 cv_performance_fig <- bag_performance %>%
   filter(!is.na(under_ratio) | number_bags ==1) %>%
   filter(number_bags %in% bags_to_show) %>%
@@ -281,7 +281,7 @@ cv_performance_fig <- bag_performance %>%
 
 cv_performance_fig
 
-ggsave(here::here("output_figures/figure_s2.png"),cv_performance_fig,width=7.5,height=7.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s3.png"),cv_performance_fig,width=7.5,height=7.5,device="png",dpi=300)
 
 # Non-bagging version has standard error too large
 # Stick with 5 bags to reduce variation
@@ -290,24 +290,26 @@ ggsave(here::here("output_figures/figure_s2.png"),cv_performance_fig,width=7.5,h
 optimized_model <- tibble(model_type = "random-forest",
                           bagging = TRUE,
                           under_ratio = 1,
-                          number_bags = 5)
+                          number_bags = 100)
 
 cv_performance <- bag_performance %>% 
   mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
-  inner_join(optimized_model,by = c("model_type", "number_bags", "under_ratio"))
+  inner_join(optimized_model,by = c("model_type", "number_bags", "under_ratio","bagging"))
 
 optimized_model$.threshold <- cv_performance$.threshold[1]
 ```
 
 ```{r eval = FALSE}
 # Train final model on full dataset
-tic()
 set.seed(101)
 # Define all model runs
 model_runs_final <- optimized_model %>%
-  crossing(tibble(bag = seq(100))) %>% #seq(optimized_model$bagging))) %>%
-  # Want different seed each time downsampling is done, for bagging
-  mutate(seed = sample.int(10^5,n())) %>%
+  crossing(tibble(bag = seq(optimized_model$number_bags))) %>%
+  mutate(seed = sample.int(10^5,n()))
+
+pb <- progress_estimated(nrow(model_runs_final))
+
+predictions_final <- model_runs_final %>%
   mutate(recipe = map2(seed,bagging,function(x,y){
     # Add downsampling to pre-processing recipe if bagging
     ifelse(!y,
@@ -315,38 +317,42 @@ model_runs_final <- optimized_model %>%
            tmp_recipe <- fl_rec %>%
              step_downsample("offender",under_ratio=y,seed=x,skip=TRUE))
     return(tmp_recipe)
-  })) %>%
-  # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
-  mutate(workflow = map2(recipe,model_type,function(x,y){
+    # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
+  }),
+  workflow = map2(recipe,model_type,function(x,y){
     # Add either random forest or svm to worflow, along with appropriate recipe
     ifelse(y == "random-forest",
            tmp_workflow <- workflow() %>%
              add_model(rf_mod %>%
-             set_args(importance = "impurity_corrected"))  %>%
+             set_args(importance = "impurity_corrected")) %>%
              add_recipe(x),
            tmp_workflow <- workflow() %>%
              add_model(svm_mod) %>%
              add_recipe(x))
     return(tmp_workflow)
   })) %>%
-  # No longer need these columns
-  dplyr::select(-recipe)
-toc()
-
-# Initialize progress bar
-tic()
-# Make predictions for all model runs
-predictions_final <- model_runs_final %>%
+  # Remove unnecessary columns
+  dplyr::select(-seed,-recipe) %>%
+  # For each workflow, do entire model fitting process across all folds
   mutate(fit = map(workflow,~fit(.x,training_df)),
-         predict = map(fit,~predict(.x,training_df,type="prob") %>%
-                         bind_cols(training_df)))
-toc()
+         predict = map(fit,function(x){
+           tmp <- x %>%
+             # Predict assessment data using fit
+             predict(training_df, type = "prob") %>%
+             # Add predictions to assessment data
+             bind_cols(training_df)%>%
+             # Select relevant columns
+             dplyr::select(mmsi,year,offender,.pred_1)
+           # Increment progress bar
+           pb$tick()$print()
+           return(tmp)
+         })) %>%
+  dplyr::select(-workflow)
 
 saveRDS(predictions_final,paste0(data_directory,"/predictions_final.Rdata"))
 
 as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
 predictions_figures <- predictions_final %>%
-  dplyr::select (predict)%>%
   unnest(predict) %>%
   # Switch factors to numeric for faster computation, then switch back
   mutate(offender = as.numeric.factor(offender),
@@ -370,25 +376,6 @@ predictions_figures <- predictions_final %>%
 
 # Save final predictions
 write_csv(predictions_figures,here::here("interim_data/s4_final_model_predictions.csv"))
-
-
-# Do google checks
-# Check 50 vessels with highest risk score
-# Found 1 new forced labor vessel during search
-check_positive <- predictions_figures %>% 
-  filter(class == 1 & offender ==0) %>% 
-  arrange(desc(.pred_1)) %>% 
-  dplyr::select(mmsi,.pred_1,year) %>%
-  slice(1:50)
-set.seed(101)
-# Check 50 vessels at random that were classified as low-risk
-check_negative <- predictions_figures %>% 
-  filter(offender ==0) %>% 
-  dplyr::select(mmsi,.pred_1,year) %>% 
-  sample_n(50)
-
-write_csv(check_positive,here::here("interim_data/check_positive.csv"))
-write_csv(check_negative,here::here("interim_data/check_negative.csv"))
 
 vessel_lookup <- read_csv(here::here("raw_data/s2_indicator_lookup.csv"))
 
@@ -418,7 +405,7 @@ importance_data <- predictions_final %>%
                                     str_detect(Feature,"flag") ~ paste0("Flag: ", countrycode(word(Feature, 2, sep = "_"),"iso3c","country.name")),
                                     TRUE ~ indicator_name)) 
 # Save data for figure 4
-write_csv(importance_data,here::here("interim_data/s8_figure_s4_data.csv"))
+write_csv(importance_data,here::here("interim_data/s8_figure_s5_data.csv"))
 ```
 
 # Make figures
@@ -429,7 +416,7 @@ predictions_figures <- read_csv(here::here("interim_data/s4_final_model_predicti
 
 ## Variable importance
 ```{r}
-importance_fig <- read_csv(here::here("interim_data/s8_figure_s4_data.csv")) %>%
+importance_fig <- read_csv(here::here("interim_data/s8_figure_s5_data.csv")) %>%
   ggplot(aes(x = reorder(indicator_name,Importance), y = Importance)) +
   geom_bar(stat = "identity",color="black") +
   coord_flip() +
@@ -439,7 +426,7 @@ importance_fig <- read_csv(here::here("interim_data/s8_figure_s4_data.csv")) %>%
 
 importance_fig
 
-ggsave(here::here("output_figures/figure_s4.png"),importance_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s5.png"),importance_fig,width=7.5,height=5,device="png",dpi=300)
 ```
 
 ## Classification by training label
@@ -464,20 +451,23 @@ class_fig <- predictions_figures  %>%
 
 class_fig
 
-ggsave(here::here("output_figures/figure_s3.png"),class_fig,width=7.5,height=3.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s4.png"),class_fig,width=7.5,height=3.5,device="png",dpi=300)
 ```
 
 ## High risk vessels and crew over time
 
 ```{r}
+# What is the number of unique high-risk vessels (vessels that were high-risk during at least 1 year)?
 number_high_risk_vessels <- predictions_figures %>%
     filter(class ==1) %>%
     .$mmsi %>% unique() %>% length()
 
+# What is the fraction of unique vessels that were high-risk during at least 1 year?
 fraction_high_risk_vessels <- number_high_risk_vessels /
   (predictions_figures %>%
     .$mmsi %>% unique() %>% length())
 
+# What is the number of potentially affected crew that were on high-risk vessels?
 number_affected_crew <- predictions_figures %>%
   filter(class ==1) %>%
   group_by(mmsi) %>%
@@ -1062,79 +1052,6 @@ riskiest_fleets <-predictions_figures  %>%
 
 ```
 
-# Greenpeace verification
-
-```{r eval = FALSE}
-sql<-"WITH
-  risk AS(
-  SELECT
-    year,
-    mmsi,
-    probability risk_score,
-    gear,
-    class
-  FROM
-    `ucsb-gfw.human_rights.risk_predictions`),
-  vessel_info AS(
-  SELECT
-  year,
-    CAST(ssvid AS INT64) mmsi,
-    registry_info.best_known_imo imo,
-    best.best_flag flag,
-    ais_identity.shipname_mostcommon.value shipname,
-    ais_identity.n_shipname_mostcommon.value normalized_shipname,
-    best.best_length_m length_m,
-    best.best_tonnage_gt tonnage_gt,
-    best.best_engine_power_kw engine_power_kw,
-    best.best_crew_size crew_size
-  FROM
-    `world-fishing-827.gfw_research.vi_ssvid_byyear_v20190430` )
-SELECT
-  *
-FROM
-  risk
-LEFT JOIN
-vessel_info
-USING(mmsi,year)
-ORDER BY
-  risk_score DESC"
-
-bq_project_query(gfw_project, sql) %>%
-  bq_table_download(max_results = Inf) %>%
-  write_csv(path=here::here("interim_data/greenpeace_verification.csv"))
-```
-
-
-```{r}
-# From paper
-# 8 longliners, 6 of which we can match
-# https://storage.googleapis.com/planet4-southeastasia-stateless/2019/12/b68e7b93-greenpeace-seabound-book-c.pdf
-# Matching info: https://docs.google.com/spreadsheets/d/1L8bW-HpCEEQ5LwyJmnCboeAt6rOoxh9NefiirhRskM0/edit#gid=0
-greenpeace_verification <- read_csv(here::here("interim_data/greenpeace_verification.csv"))
-
-matched_boats <- greenpeace_verification %>%
-  filter(mmsi %in% c(416236600,416001084,413322770,520313000) |
-           imo %in% c(9260249,8996138,8748957))
-
-n_matched_boats <- unique(matched_boats$mmsi) %>% length()
-n_matched_vessel_years <- nrow(matched_boats)
-
-performance <- matched_boats  %>%
-  group_by(class) %>%
-  summarize(count = n())
-
-recall <- (performance %>%
-  filter(class==1) %>%
-  .$count) / nrow(matched_boats)
-
-matched_high_risk_boats <- matched_boats %>% filter(class==1)
-
-n_matched_high_risk_boats <- matched_high_risk_boats %>% .$mmsi %>% unique() %>% length()
-
-high_risk_performance <- matched_boats %>%
-  filter(mmsi %in% matched_high_risk_boats$mmsi)
-```
-
 # Time at sea stat for paper - fraction of total time at sea by included vessels
 
 ```{r eval = FALSE}
@@ -1173,3 +1090,55 @@ included)
 SELECT
 (SELECT active_hours FROm summary WHERE included)/((SELECT active_hours FROm summary WHERE NOT included)+(SELECT active_hours FROm summary WHERE included)) fraction_active_hours_included"
 ```
+
+```{r}
+# Make figure summarizing ILO indicators
+# Pull in forced labor vessel database
+ilo_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv")) %>%
+  # Filter to just those cases that were used in the analysis
+  filter(fldb_vessel_id %in% training_df$fldb_vessel_id) %>%
+  dplyr::select(fldb_vessel_id,forced_labor_indicator)%>%
+  separate_rows(forced_labor_indicator,sep = ' \\| ') %>%
+  mutate(forced_labor_indicator = case_when(forced_labor_indicator == "Abusive working and living conditons" ~ "Abusive working and living conditions",
+                                            forced_labor_indicator == "Witholding of wages" ~ "Withholding of wages",
+                                            TRUE ~ forced_labor_indicator)) %>%
+  mutate(fldb_vessel_id = as.character(fldb_vessel_id))
+
+# Summarize data by indicator, for organizing figure
+ilo_summary_data <- ilo_data %>%
+  group_by(forced_labor_indicator) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  arrange(count)
+# Summarize data by vessel, for organizing figure
+ilo_summary_vessel<- ilo_data %>%
+  group_by(fldb_vessel_id) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  arrange(-count)
+
+ilo_indicator_fig <- ilo_data %>%
+  mutate(forced_labor_indicator = fct_relevel(forced_labor_indicator,ilo_summary_data$forced_labor_indicator))%>%
+  mutate(fldb_vessel_id = fct_relevel(fldb_vessel_id,ilo_summary_vessel$fldb_vessel_id)) %>%
+  ggplot(aes(x=fldb_vessel_id,y=forced_labor_indicator)) +
+  geom_count() +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        legend.position = "none") +
+  labs(x = "Case",y="") +
+  coord_equal()
+
+ilo_indicator_fig
+ggsave(here::here("output_figures/figure_s2.png"),ilo_indicator_fig,width=7.5,height=3,device="png",dpi=300)
+
+ilo_indicator_fig_2 <- ilo_summary_data %>%
+  ggplot(aes(x = reorder(forced_labor_indicator,count), y = count)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(x = "",
+       y = "Number of cases\nexhibiting this ILO forced labor indicator") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+
