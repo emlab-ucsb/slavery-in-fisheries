@@ -625,7 +625,7 @@ training_dataset_fig <- training_df  %>%
 
 training_dataset_fig
 
-ggsave(here::here("output_figures/figure_s1.png"),training_dataset_fig,width=7.5,height=4.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5,height=4.5,device="png",dpi=300)
 ```
 
 \pagebreak
@@ -1129,7 +1129,7 @@ ilo_indicator_fig <- ilo_data %>%
   coord_equal()
 
 ilo_indicator_fig
-ggsave(here::here("output_figures/figure_s2.png"),ilo_indicator_fig,width=7.5,height=3,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=3,device="png",dpi=300)
 
 ilo_indicator_fig_2 <- ilo_summary_data %>%
   ggplot(aes(x = reorder(forced_labor_indicator,count), y = count)) +
