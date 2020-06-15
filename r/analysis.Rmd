@@ -1099,7 +1099,65 @@ GROUP BY
 included)
 SELECT
 (SELECT active_hours FROm summary WHERE included)/((SELECT active_hours FROm summary WHERE NOT included)+(SELECT active_hours FROm summary WHERE included)) fraction_active_hours_included"
+
+fraction_active_hours_included <- bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf)
 ```
+
+## Stats for how often classification changes
+
+```{r eval=FALSE}
+sql<-"WITH
+  base_table AS(
+  SELECT
+    mmsi,
+    class,
+    year,
+    LAG(year) OVER(PARTITION BY mmsi ORDER BY year ASC) previous_year,
+    LAG(class) OVER(PARTITION BY mmsi ORDER BY year ASC) previous_class
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions`),
+  change_table AS(
+  SELECT
+    *,
+    (CASE
+        WHEN class = 1 AND previous_class = 0 THEN 'increased_risk'
+        WHEN class = 0
+      AND previous_class = 1 THEN 'decreased_risk'
+      ELSE
+      'no_change'
+    END
+      ) change
+  FROM
+    base_table
+  WHERE
+    NOT previous_class IS NULL)
+SELECT
+  change,
+  COUNT(*) number_vessel_years,
+  COUNT(*)/(
+  SELECT
+    COUNT(*)
+  FROM
+    change_table)*100 percentage_vessel_years
+FROM
+  change_table
+GROUP BY
+  change
+UNION ALL
+SELECT
+  'total' change,
+  (
+  SELECT
+    COUNT(*)
+  FROM
+    change_table) number_vessel_years,
+  100 percentage_vessel_years"
+
+vessel_classification_change_info <- bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf)
+```
+
 
 ```{r}
 # Make figure summarizing ILO indicators
