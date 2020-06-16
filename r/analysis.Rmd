@@ -1210,3 +1210,57 @@ ilo_indicator_fig_2 <- ilo_summary_data %>%
 ```
 
 
+```{r}
+decreasing_risk_vessels <-predictions_figures %>%
+  arrange(mmsi,year) %>%
+  group_by(mmsi) %>%
+  mutate(previous_class = lag(class),
+         next_class = lead(class)) %>%
+  filter((previous_class == 1 & class == 0) | (class == 1 & next_class == 0))
+
+decreasing_risk_vessels_figure_data <- decreasing_risk_vessels %>%
+  filter(!is.na(flag)) %>%
+  # Only include gears for which we have known offenders
+  filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
+  # Add unique id for every row
+  mutate(unique_id = row_number()) %>%
+  # Make binaries into 1s/0s
+  mutate(offender = ifelse(offender,1,0),
+         actual = offender,
+         foc = ifelse(foc,1,0),
+         iuu = ifelse(iuu,1,0)) %>%
+  dplyr::select(-year,-flag,-actual,-fldb_vessel_id,-source_id,-unique_id,-Country,-Prediction,-Label,-offender,-.pred_1,-previous_class,-next_class) %>%
+  mutate(ais_type = ifelse(ais_type == "A",1,0)) 
+
+decreasing_risk_vessels_figure_data_processed <- recipes::recipe(class ~ ., data = head(decreasing_risk_vessels_figure_data)) %>%
+  recipes::update_role(mmsi, new_role = "id variable") %>%
+  recipes::update_role(gear, new_role = "id variable") %>%
+  # Box-Cox transformation on all numeric
+  recipes::step_BoxCox(all_numeric())%>%
+  step_normalize(all_predictors()) %>%
+  prep(decreasing_risk_vessels_figure_data) %>%
+  juice() %>%
+  pivot_longer(cols=c(-"mmsi",-"gear",-"class"),names_to = "indicator") %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  left_join(vessel_lookup,by="indicator")
+
+decreasing_risk_vessels_figure_data_processed %>%
+  group_by(class,indicator_name,gear) %>%
+  summarize(mean = mean(value,na.rm = TRUE)) %>%
+  ungroup() %>%
+  pivot_wider(names_from="class",values_from="mean") %>%
+  mutate(delta = `0` - `1`) %>%
+  filter(!is.nan(delta)) %>%
+  ggplot(aes(x = reorder(indicator_name,delta),y=delta))+
+  geom_hline(yintercept=0) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  theme_bw()+
+  facet_grid(.~gear)  +
+  labs(x = "",
+       y = "Change in mean normalized indicator value\nwhen moving from high- to low-risk")
+
+```
+
