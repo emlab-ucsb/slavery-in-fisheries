@@ -364,7 +364,8 @@ predictions_final <- model_runs_final %>%
 saveRDS(predictions_final,paste0(data_directory,"/predictions_final.Rdata"))
 
 as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
-predictions_figures <- predictions_final %>%
+predictions_figures <- predictions_final %>%  
+  dplyr::select(-fit) %>%
   unnest(predict) %>%
   # Switch factors to numeric for faster computation, then switch back
   mutate(offender = as.numeric.factor(offender),
@@ -1470,8 +1471,8 @@ predictions_final <- model_runs_final %>%
 saveRDS(predictions_final,paste0(data_directory,"/predictions_final_robustness.Rdata"))
 
 predictions_figures <- predictions_final %>%
+  dplyr::select(-fit) %>%
   unnest(predict) %>%
-  unnest(fit) %>%
   # Switch factors to numeric for faster computation, then switch back
   mutate(offender = as.numeric.factor(offender),
          mmsi = as.numeric.factor(mmsi),
@@ -1495,3 +1496,17 @@ predictions_figures <- predictions_final %>%
 # Save final predictions
 write_csv(predictions_figures,here::here("interim_data/final_model_predictions_robustness.csv"))
 ```
+
+```{r}
+predictions_figures <- read_csv(here::here("interim_data/final_model_predictions_robustness.csv"))
+# What is the number of unique high-risk vessels (vessels that were high-risk during at least 1 year)?
+number_high_risk_vessels <- predictions_figures %>%
+    filter(class ==1) %>%
+    .$mmsi %>% unique() %>% length()
+
+# What is the fraction of unique vessels that were high-risk during at least 1 year?
+fraction_high_risk_vessels <- number_high_risk_vessels /
+  (predictions_figures %>%
+    .$mmsi %>% unique() %>% length())
+```
+
