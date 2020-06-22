@@ -31,6 +31,8 @@ source(here::here("r/threshold_perf_custom.R"))
 
 # Set data directory based on system
 # This references the emLab shared Team Drive
+# This directory will be used for cacheing large results, as well as results from portions of the analysis that take a long time to run
+# Note that for this analysis to be completely re-run, the user should specify an appropriate data directory. Otherwise, the most important cached data for reproducing the figures and statistics in the paper can be found within the GitHub repo itself.
 data_directory <- ifelse(Sys.info()["sysname"]=="Windows","G:/Shared\ drives/emLab/Projects/current-projects/forced-labor-and-fisheries/data/phase-1",
                          "/Volumes/GoogleDrive/Shared\ drives/emLab/Projects/current-projects/forced-labor-and-fisheries/data/phase-1")
 
@@ -1272,7 +1274,7 @@ decreasing_risk_vessels_figure_data_processed %>%
 
 # Robustness check
 
-Re-run the model, but train the model while assuming vessel-years are positive only in the single year prior to when the forced labor abuse was reporte
+Re-run the model, but train the model while assuming vessel-years are positive only in the single year prior to when the forced labor abuse was reported.
 
 ```{r eval = FALSE}
 # Cross-validation
@@ -1306,7 +1308,7 @@ model_runs <- crossing(under_ratio_vec,
   # Want different seed each time downsampling is done, for bagging
   mutate(seed = sample.int(10^5,n())) %>%
   # Only look at random forest and downsampling ratio of 1, the optimized model from the main analysis
-  filter(model_type == "random-forest" & under_ratio"" ==1)
+  filter(model_type == "random-forest" & under_ratio ==1)
 
 pb <- progress_estimated(nrow(model_runs) * nrow(cv_splits))
 
@@ -1358,8 +1360,9 @@ write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions_100_robustness
 ```
 
 ```{r eval = FALSE}
+# Only look at 100 bags, the same number of bags as the main model
 bags_to_show <- c(100)
-predictions <- read_csv(,paste0(data_directory,"/tidy_cv_predictions_100_robustness.csv"))
+predictions <- read_csv(paste0(data_directory,"/tidy_cv_predictions_100_robustness.csv"))
 bag_performance <- map_df(bags_to_show,function(x){
   tmp_performance <- predictions %>%
     filter(bag<=x) %>%
