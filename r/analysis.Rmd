@@ -39,7 +39,7 @@ training_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
   filter(!is.na(flag)) %>%
   # Only include gears for which we have known offenders
   filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
-  dplyr::select(-years_until_caught) %>%
+  #dplyr::select(-years_until_caught) %>%
   # Add unique id for every row
   mutate(unique_id = row_number()) %>%
   # Make binaries into 1s/0s
@@ -61,6 +61,17 @@ training_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
   mutate_at(
      vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender","actual","unique_id"),
      list(as.factor))
+
+# Create version of training dataset that only classified positive vessels for a single year, the year prior to being caught
+# We will use this in a robustness check at the end of the analysis
+training_df_reduced <- training_df %>%
+  mutate(offender = ifelse(offender == 1 & years_until_caught == 1,1,0),
+         offender = as.factor(offender)) %>%
+  dplyr::select(-years_until_caught)
+
+# Remove years_until_caught column now
+training_df <- training_df %>%
+  dplyr::select(-years_until_caught)
 
 # Bigquery project
 ucsb_project <- "ucsb-gfw"
@@ -1216,21 +1227,15 @@ decreasing_risk_vessels <-predictions_figures %>%
   group_by(mmsi) %>%
   mutate(previous_class = lag(class),
          next_class = lead(class)) %>%
+  ungroup() %>%
   filter((previous_class == 1 & class == 0) | (class == 1 & next_class == 0))
 
 decreasing_risk_vessels_figure_data <- decreasing_risk_vessels %>%
-  filter(!is.na(flag)) %>%
-  # Only include gears for which we have known offenders
-  filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
-  # Add unique id for every row
-  mutate(unique_id = row_number()) %>%
   # Make binaries into 1s/0s
-  mutate(offender = ifelse(offender,1,0),
-         actual = offender,
-         foc = ifelse(foc,1,0),
-         iuu = ifelse(iuu,1,0)) %>%
-  dplyr::select(-year,-flag,-actual,-fldb_vessel_id,-source_id,-unique_id,-Country,-Prediction,-Label,-offender,-.pred_1,-previous_class,-next_class) %>%
-  mutate(ais_type = ifelse(ais_type == "A",1,0)) 
+  mutate(foc = ifelse(foc,1,0),
+         iuu = ifelse(iuu,1,0),
+         ais_type = ifelse(ais_type == "A",1,0)) %>%
+  dplyr::select(-year,-flag,-actual,-fldb_vessel_id,-source_id,-Country,-Prediction,-Label,-offender,-.pred_1,-previous_class,-next_class)
 
 decreasing_risk_vessels_figure_data_processed <- recipes::recipe(class ~ ., data = head(decreasing_risk_vessels_figure_data)) %>%
   recipes::update_role(mmsi, new_role = "id variable") %>%
@@ -1264,3 +1269,229 @@ decreasing_risk_vessels_figure_data_processed %>%
 
 ```
 
+# Robustness check
+
+Re-run the model, but train the model while assuming vessel-years are positive only in the single year prior to when the forced labor abuse was reporte
+
+```{r eval = FALSE}
+# Cross-validation
+# Ensure there is no splitting across source_id (and consequently fldb_vessel_id) across analysis and assessment datasets
+set.seed(101)
+cv_splits <- group_vfold_cv(training_df_reduced, 
+                            group = source_id,
+                            v = 10)
+
+# NA means no downsampling, so just the regular base classifier
+under_ratio_vec <- tibble(under_ratio = c(NA,seq(1,5)))
+# Number of bags
+bag_vec <- tibble(bag = seq(100))
+# Different models to try
+model_type_vec <- tibble(model_type = c("random-forest","svm"))
+
+analysis_data <- cv_splits %>%
+  mutate(# Create analysis dataset based on CV folds
+    analysis = map(splits,~analysis(.x)),
+    # Create assessment dataset based on CV folds
+    assessment = map(splits,~assessment(.x))) %>%
+  dplyr::select(-splits)
+
+model_runs <- crossing(under_ratio_vec,
+                       model_type_vec,
+           bag_vec) %>%
+  # If there's no downsampling, there's no bagging
+  mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
+  # Don't need to bag if not doing downsampling
+  filter(!(!bagging & bag >1)) %>%
+  # Want different seed each time downsampling is done, for bagging
+  mutate(seed = sample.int(10^5,n())) %>%
+  # Only look at random forest and downsampling ratio of 1, the optimized model from the main analysis
+  filter(model_type == "random-forest" & under_ratio"" ==1)
+
+pb <- progress_estimated(nrow(model_runs) * nrow(cv_splits))
+
+predictions <- model_runs %>%
+  mutate(recipe = map2(seed,bagging,function(x,y){
+    # Add downsampling to pre-processing recipe if bagging
+    ifelse(!y,
+           tmp_recipe <- fl_rec,
+           tmp_recipe <- fl_rec %>%
+             step_downsample("offender",under_ratio=y,seed=x,skip=TRUE))
+    return(tmp_recipe)
+    # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
+  }),
+  workflow = map2(recipe,model_type,function(x,y){
+    # Add either random forest or svm to worflow, along with appropriate recipe
+    ifelse(y == "random-forest",
+           tmp_workflow <- workflow() %>%
+             add_model(rf_mod) %>%
+             add_recipe(x),
+           tmp_workflow <- workflow() %>%
+             add_model(svm_mod) %>%
+             add_recipe(x))
+    return(tmp_workflow)
+  })) %>%
+  # Remove unnecessary columns
+  dplyr::select(-seed,-recipe) %>%
+  # For each workflow, do entire model fitting process across all folds
+  mutate(predict = map(workflow,function(x){
+    analysis_data %>%
+      mutate(predict = map2(analysis,assessment,function(y,z){
+        tmp <- fit(x,y) %>%
+          # Predict assessment data using fit
+          predict(z, type = "prob") %>%
+          # Add predictions to assessment data
+          bind_cols(z) %>%
+          # Select relevant columns
+          dplyr::select(mmsi,year,offender,.pred_1)
+        # Increment progress bar
+        pb$tick()$print()
+        return(tmp)
+      })) %>%
+      dplyr::select(id,predict) %>%
+      unnest(predict)
+  })) %>%
+  dplyr::select(-workflow) %>%
+  unnest(predict)
+
+write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions_100_robustness.csv"))
+```
+
+```{r eval = FALSE}
+bags_to_show <- c(100)
+predictions <- read_csv(,paste0(data_directory,"/tidy_cv_predictions_100_robustness.csv"))
+bag_performance <- map_df(bags_to_show,function(x){
+  tmp_performance <- predictions %>%
+    filter(bag<=x) %>%
+    # For each fold and hyperparameter set, take average prediction for each vessel-year (mmsi and year) across bags
+    group_by(id,model_type,under_ratio,mmsi,year) %>%
+    summarize(offender = offender[1],
+              .pred_1 = mean(.pred_1,na.rm=TRUE)) %>%
+    ungroup()  %>%
+  # Make offender =1 reference level
+  mutate(offender = relevel(as.factor(offender),"1")) %>%
+    # Then we will calculate performance metrics, by threshold, for each fold and hyperparameter set
+    group_by(id,model_type,under_ratio) %>%
+    nest() %>%
+    ungroup() %>%
+    # Calculated metrics will include recall, modified_f1, and detection_prevalence
+    mutate(threshold_perf = map(data,~threshold_perf_custom(.x,
+                                                            truth = offender,
+                                                            estimate = .pred_1,
+                                                            thresholds=seq(0.01,0.99,0.01)))) %>%
+    dplyr::select(-data) %>%
+    unnest(threshold_perf) %>%
+    # Now for each hyperparameter set, we will take the average performance across all folds
+    group_by(model_type,under_ratio,.threshold,.metric) %>%
+    summarize(mean_performance = mean(.estimate,na.rm=TRUE),
+              sd_performance = sd(.estimate,na.rm=TRUE)) %>%
+    ungroup() %>%
+    group_by(model_type,under_ratio) %>%
+    nest() %>%
+    ungroup() %>%
+    # Now we will find the optimial threshold for maximizing the modified F1 estimator
+    # Maximize the mean
+    mutate(optimal_threshold = map_dbl(data,~.x %>%
+                                         filter(.metric=="modified_f1") %>%
+                                         arrange(desc(mean_performance)) %>%
+                                         slice(1) %>%
+                                         .$.threshold),
+           # optimized_metrics will contain metrics with optimized modified F1 estimator
+           optimized_metrics = map2(data,optimal_threshold,~.x %>%
+                                      filter(.threshold==.y))) %>% 
+    unnest(optimized_metrics) %>%
+    dplyr::select(-optimal_threshold,-data) %>%
+    mutate(number_bags = x)
+  print(paste(x,"complete"))
+  tmp_performance
+})
+# Save bag performance estimates for later
+write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance_100_robustness.csv"))
+```
+
+```{r eval = FALSE}
+# Read in cached bag performance
+bag_performance <- read_csv(paste0(data_directory,"/tidy_cv_bag_performance_100_robustness.csv"))
+
+cv_performance <- bag_performance %>% 
+  mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
+  inner_join(optimized_model,by = c("model_type", "number_bags", "under_ratio","bagging"))
+
+optimized_model$.threshold <- cv_performance$.threshold[1]
+
+# Train final model on full dataset
+set.seed(101)
+# Define all model runs
+model_runs_final <- optimized_model %>%
+  crossing(tibble(bag = seq(optimized_model$number_bags))) %>%
+  mutate(seed = sample.int(10^5,n()))
+
+pb <- progress_estimated(nrow(model_runs_final))
+
+predictions_final <- model_runs_final %>%
+  mutate(recipe = map2(seed,bagging,function(x,y){
+    # Add downsampling to pre-processing recipe if bagging
+    ifelse(!y,
+           tmp_recipe <- fl_rec,
+           tmp_recipe <- fl_rec %>%
+             step_downsample("offender",under_ratio=y,seed=x,skip=TRUE))
+    return(tmp_recipe)
+    # Create workflow based on random forest hyperparameter and downsampling pre-processing recipe
+  }),
+  workflow = map2(recipe,model_type,function(x,y){
+    # Add either random forest or svm to worflow, along with appropriate recipe
+    ifelse(y == "random-forest",
+           tmp_workflow <- workflow() %>%
+             add_model(rf_mod %>%
+             set_args(importance = "impurity_corrected")) %>%
+             add_recipe(x),
+           tmp_workflow <- workflow() %>%
+             add_model(svm_mod) %>%
+             add_recipe(x))
+    return(tmp_workflow)
+  })) %>%
+  # Remove unnecessary columns
+  dplyr::select(-seed,-recipe) %>%
+  # For each workflow, do entire model fitting process across all folds
+  mutate(fit = map(workflow,~fit(.x,training_df_reduced)),
+         predict = map(fit,function(x){
+           tmp <- x %>%
+             # Predict assessment data using fit
+             predict(training_df_reduced, type = "prob") %>%
+             # Add predictions to assessment data
+             bind_cols(training_df_reduced)%>%
+             # Select relevant columns
+             dplyr::select(mmsi,year,offender,.pred_1)
+           # Increment progress bar
+           pb$tick()$print()
+           return(tmp)
+         })) %>%
+  dplyr::select(-workflow)
+
+saveRDS(predictions_final,paste0(data_directory,"/predictions_final_robustness.Rdata"))
+
+predictions_figures <- predictions_final %>%
+  unnest(predict) %>%
+  unnest(fit) %>%
+  # Switch factors to numeric for faster computation, then switch back
+  mutate(offender = as.numeric.factor(offender),
+         mmsi = as.numeric.factor(mmsi),
+         year = as.numeric.factor(year)) %>%
+    # Take average prediction for each vessel-year (mmsi and year) across bags
+    group_by(mmsi,year) %>%
+    summarize(offender = offender[1],
+              .pred_1 = mean(.pred_1,na.rm=TRUE)) %>%
+    ungroup() %>% 
+  mutate(mmsi = as.factor(mmsi),
+         year = as.factor(year)) %>%
+  left_join(training_df %>%
+              dplyr::select(-offender),
+            by=c("mmsi","year")) %>%
+  mutate(Country = countrycode(flag,"iso3c","country.name"))%>%
+  # Use optimal threshold found above
+  mutate(class = ifelse(.pred_1 >optimized_model$.threshold,1,0))%>% 
+  mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
+  mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
+
+# Save final predictions
+write_csv(predictions_figures,here::here("interim_data/final_model_predictions_robustness.csv"))
+```
