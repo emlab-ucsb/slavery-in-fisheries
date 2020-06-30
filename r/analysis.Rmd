@@ -49,17 +49,17 @@ training_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
          actual = offender,
          foc = ifelse(foc,1,0),
          iuu = ifelse(iuu,1,0))%>%
-  # Only classify known offenders as positie in the year prior to being caught
+  # Only classify known offenders as positive in the year prior to being caught
   mutate(offender = ifelse(offender == 1 & years_until_caught == 1,1,0)) %>%
   dplyr::select(-years_until_caught) %>%
   # Add media source id
   # If it's not a known offender, create dummy ID for CV
-  mutate(source_id = ifelse(is.na(source_id),
+  mutate(source_id = ifelse(offender != 1,
                             paste0("no_source_",row_number()),
                             source_id)) %>%
   # Add forced labor database vessel id
   # If it's not a known offender, create dummy ID for CV
-  mutate(fldb_vessel_id = ifelse(is.na(fldb_vessel_id),
+  mutate(fldb_vessel_id = ifelse(offender != 1,
                             paste0("no_fldb_info_",row_number()),
                             fldb_vessel_id)) %>%
   # Make these columns factors
@@ -261,7 +261,7 @@ cv_performance_fig <- bag_performance %>%
   filter(!is.na(under_ratio) | number_bags ==1) %>%
   mutate(number_bags = paste0("Bags: ",number_bags) %>%
            fct_relevel(paste0("Bags: ",bags_to_show))) %>%
-  mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
+ mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
            fct_relevel("B")) %>%
   mutate(model_type=ifelse(model_type=="random-forest","Random forest","Support vector\nmachine")) %>%
   mutate(error_min = pmax(mean_performance-sd_performance,0),
@@ -419,7 +419,7 @@ write_csv(importance_data,here::here("interim_data/s8_figure_s5_data.csv"))
 # Make figures
 
 ```{r}
-predictions_figures_old <- read_csv(here::here("interim_data/s4_final_model_predictions.csv"))
+predictions_figures <- read_csv(here::here("interim_data/s4_final_model_predictions.csv"))
 ```
 
 ## Variable importance
@@ -534,7 +534,7 @@ vessels_fig_percentage <- predictions_figures %>%
   facet_grid(.~gear) +
   theme_bw()+
   scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
-  scale_x_continuous(breaks = unique(predictions_figures$year)) +
+  scale_x_discrete(breaks = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.minor = element_blank())+
@@ -552,7 +552,7 @@ vessels_fig <- cowplot::plot_grid(plot_grid(vessels_fig_total+ theme(legend.posi
                    legend,
                    ncol=2,
                    rel_widths = c(4,1))  
-
+vessels_fig
 ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,device="png",dpi=300)
 ```
 
@@ -597,7 +597,7 @@ indicator_figure_data <- recipes::recipe(offender ~ ., data = head(training_df_f
   mutate(offender=ifelse(offender==1,"Positive","Unlabeled")) 
 
 indicator_figure <- indicator_figure_data %>%
-  ggplot(aes(x = reorder(indicator_name,value),y=value,color=factor(offender))) +
+  ggplot(aes(x = reorder(indicator_name,desc(indicator_name)),y=value,color=factor(offender))) +
   geom_boxplot(position=position_dodge(width=1),outlier.size = 0.1) +
   disco::scale_color_disco(palette = "vibrant", "Training data label",direction=1,alpha=1,
                            guide = guide_legend(reverse = TRUE) ) +
@@ -972,11 +972,11 @@ world_land_ports <- world_land %>%
 countries_at_risk <- port_data %>% filter(fraction_high_risk_visits >0) %>% 
   mutate(country = countrycode(port_iso3,"iso3c","country.name")) %>% distinct(country) %>% arrange(country)
   
-n_countries_at_risk <-  length(countries_at_risk)
+n_countries_at_risk <-  nrow(countries_at_risk)
 
 countries <- length(unique(port_data$port_iso3))
 
-fraction_countries_at_risk <- countries_at_risk / countries
+fraction_countries_at_risk <- n_countries_at_risk / countries
 
 psma_countries_at_risk <- port_data %>% filter(psma_country & fraction_high_risk_visits >0) %>% .$port_iso3 %>% unique() %>% sort()
 
