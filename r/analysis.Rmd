@@ -1024,19 +1024,38 @@ ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,
 ```{r}
 # Make figure summarizing ILO indicators
 # Pull in forced labor vessel database
-ilo_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))%>%
+fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))%>%
   # Filter to just those cases that were used in the analysis
-  filter(fldb_vessel_id %in% (training_df %>% filter(offender==1) %>% .$fldb_vessel_id)) %>%
+  filter(fldb_vessel_id %in% (training_df %>% filter(offender==1) %>% .$fldb_vessel_id))
+
+ilo_data <- fldb_data %>%
   dplyr::select(fldb_vessel_id,forced_labor_indicator)%>%
   separate_rows(forced_labor_indicator,sep = ' \\| ') %>%
   mutate(forced_labor_indicator = case_when(forced_labor_indicator == "Abusive working and living conditons" ~ "Abusive working and living conditions",
                                             forced_labor_indicator == "Witholding of wages" ~ "Withholding of wages",
                                             TRUE ~ forced_labor_indicator)) %>%
-  mutate(fldb_vessel_id = as.character(fldb_vessel_id))
+  mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
+  rename(name = forced_labor_indicator)%>%
+  mutate(indicator_type = "ilo_indicator")
+
+case_data <- fldb_data %>%
+  dplyr::select(fldb_vessel_id,eyewitness_account,arrests_made,charges_filed,conviction_made,penalties_sanctioned) %>%
+  rename(`Penalties sanctioned` = penalties_sanctioned,
+         `Eyewitness account` = eyewitness_account,
+         `Arrests made` = arrests_made,
+         `Charges filed` = charges_filed,
+         `Conviction made` = conviction_made) %>%
+  pivot_longer(cols = -fldb_vessel_id) %>%
+  filter(!is.na(value))  %>%
+  mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
+  mutate(indicator_type = "case_info") %>%
+  dplyr::select(-value)
+
+combined_case_data <- bind_rows(ilo_data,case_data)
 
 # Summarize data by indicator, for organizing figure
 ilo_summary_data <- ilo_data %>%
-  group_by(forced_labor_indicator) %>%
+  group_by(name) %>%
   summarize(count = n()) %>%
   ungroup() %>%
   arrange(count)
@@ -1047,19 +1066,34 @@ ilo_summary_vessel<- ilo_data %>%
   ungroup() %>%
   arrange(-count)
 
-ilo_indicator_fig <- ilo_data %>%
-  mutate(forced_labor_indicator = fct_relevel(forced_labor_indicator,ilo_summary_data$forced_labor_indicator))%>%
+# Summarize data by case info, for organizing figure
+case_summary_data <- rev(c("Eyewitness account",
+                       "Official investigation",
+                       "Arrests made",
+                       "Charges filed",
+                       "Conviction made",
+                       "Penalties sanctioned"))
+
+summary_data <- c(ilo_summary_data$name,case_summary_data)
+
+ilo_indicator_fig <- combined_case_data %>%
+  mutate(name = fct_relevel(name,summary_data))%>%
   mutate(fldb_vessel_id = fct_relevel(fldb_vessel_id,ilo_summary_vessel$fldb_vessel_id)) %>%
-  ggplot(aes(x=fldb_vessel_id,y=forced_labor_indicator)) +
+  mutate(indicator_type = ifelse(indicator_type=="case_info","Case status information","ILO forced labor indicator")) %>%
+  mutate(indicator_type = fct_relevel(indicator_type,"ILO forced labor indicator")) %>%
+  ggplot(aes(x=fldb_vessel_id,y=name)) +
+  facet_col(facets = "indicator_type",scales="free",space="free") +
   geom_count() +
   theme_bw() +
   theme(axis.text.x = element_blank(),
-        legend.position = "none") +
-  labs(x = "Case",y="") +
-  coord_equal()
+        legend.position = "none",
+        strip.background = element_blank(),
+        strip.text = element_text(hjust=0)) +
+  labs(x = "Case",y="")
 
 ilo_indicator_fig
-ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=3,device="png",dpi=300)
+
+ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=5,device="png",dpi=300)
 ```
 
 ## Paper stats
