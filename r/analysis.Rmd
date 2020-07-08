@@ -25,6 +25,7 @@ library(bigrquery)
 library(sf)
 library(here)
 library(rworldmap)
+library(ggforce)
 library(cowplot)
 # Load custom threshold_perf function, adapted from probably::threshold_perf to give different metrics
 source(here::here("r/threshold_perf_custom.R"))
@@ -652,12 +653,9 @@ ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5
 
 ## High risk fishing effort maps - 2018
 ```{r eval = FALSE}
-as.numeric.factor <- function(x) {as.numeric(levels(x))[x]}
 # Upload risk predictions
 bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
-  bq_table_upload(values = predictions_figures %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear) %>%
-                    mutate(mmsi = as.numeric.factor(mmsi),
-                           year = as.numeric.factor(year)),
+  bq_table_upload(values = predictions_figures %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear,fldb_vessel_id),
                   write_disposition = "WRITE_TRUNCATE")
 
 sql <- "#standardSQL
@@ -1022,11 +1020,60 @@ ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,
 ```
 
 ```{r}
+sql<-"
+WITH
+  offenders AS(
+  SELECT
+    mmsi,
+    fldb_vessel_id
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions`
+  WHERE
+    offender = 1),
+  vessel_info AS(
+  SELECT
+    CAST(ssvid AS INT64) mmsi,
+    year,
+    TRUE in_operation
+  FROM
+    `world-fishing-827.gfw_research.vi_ssvid_byyear_v20200701`)
+SELECT
+  *
+FROM
+  vessel_info
+JOIN
+  offenders
+USING
+  (mmsi)"
+bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf) %>%
+  write_csv(here::here("interim_data/s9_vessel_operating_years.csv"))
+```
+
+
+```{r}
 # Make figure summarizing ILO indicators
 # Pull in forced labor vessel database
 fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))%>%
   # Filter to just those cases that were used in the analysis
   filter(fldb_vessel_id %in% (training_df %>% filter(offender==1) %>% .$fldb_vessel_id))
+
+vessel_operating_years <- read_csv(here::here("interim_data/s9_vessel_operating_years.csv"))
+
+# Summarize the number and fraction of forced labor vessels in operation during each number
+still_in_operation_stats <- vessel_operating_years %>%
+  group_by(year) %>%
+  summarize(count_in_operation = n(),
+            fraction_in_operation = n()/length(unique(vessel_operating_years$fldb_vessel_id)))
+
+operation_data <- vessel_operating_years %>%
+  mutate(`Operating in 2019` = ifelse(year == 2019,TRUE,NA),
+         `Operating in 2020`= ifelse(year == 2020,TRUE,NA)) %>%
+  dplyr::select(-mmsi,-year,-in_operation) %>%
+  pivot_longer(-fldb_vessel_id) %>%
+  filter(!is.na(value)) %>%
+  mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
+  mutate(indicator_type = "operation_years")
 
 ilo_data <- fldb_data %>%
   dplyr::select(fldb_vessel_id,forced_labor_indicator)%>%
@@ -1051,7 +1098,7 @@ case_data <- fldb_data %>%
   mutate(indicator_type = "case_info") %>%
   dplyr::select(-value)
 
-combined_case_data <- bind_rows(ilo_data,case_data)
+combined_case_data <- bind_rows(ilo_data,case_data,operation_data)
 
 # Summarize data by indicator, for organizing figure
 ilo_summary_data <- ilo_data %>%
@@ -1074,21 +1121,25 @@ case_summary_data <- rev(c("Eyewitness account",
                        "Conviction made",
                        "Penalties sanctioned"))
 
-summary_data <- c(ilo_summary_data$name,case_summary_data)
+operation_summary_data <- rev(c("Operating in 2019","Operating in 2020"))
+
+summary_data <- c(ilo_summary_data$name,case_summary_data,operation_summary_data)
 
 ilo_indicator_fig <- combined_case_data %>%
   mutate(name = fct_relevel(name,summary_data))%>%
   mutate(fldb_vessel_id = fct_relevel(fldb_vessel_id,ilo_summary_vessel$fldb_vessel_id)) %>%
-  mutate(indicator_type = ifelse(indicator_type=="case_info","Case status information","ILO forced labor indicator")) %>%
+  mutate(indicator_type = case_when(indicator_type=="case_info"~"Case status information",
+                                    indicator_type=="ilo_indicator" ~ "ILO forced labor indicator",
+                                    TRUE ~ "Vessel operation status")) %>%
   mutate(indicator_type = fct_relevel(indicator_type,"ILO forced labor indicator")) %>%
   ggplot(aes(x=fldb_vessel_id,y=name)) +
-  facet_col(facets = "indicator_type",scales="free",space="free") +
+  facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
   geom_count() +
   theme_bw() +
   theme(axis.text.x = element_blank(),
         legend.position = "none",
         strip.background = element_blank(),
-        strip.text = element_text(hjust=0)) +
+        strip.text = element_text(hjust=0,angle = 0)) +
   labs(x = "Case",y="")
 
 ilo_indicator_fig
