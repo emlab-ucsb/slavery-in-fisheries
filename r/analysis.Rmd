@@ -1130,7 +1130,10 @@ case_summary_data <- rev(c("Eyewitness account",
 summary_data <- c(ilo_summary_data$name,case_summary_data,rev(sort(unique(vessel_operating_years$year))))
 
 ilo_indicator_fig <- combined_case_data %>%
-  mutate(`Training data label` = ifelse(is.na(offender),"Unlabaled","Positive")) %>%
+  mutate(`Training data label` = case_when(name == "2020" | name == "2019" ~ "Not included in training",
+                                           is.na(offender) ~ "Unlabaled",
+                                           TRUE ~ "Positive")) %>%
+  mutate(`Training data label` = fct_relevel(`Training data label`,c("Positive","Unlabaled"))) %>%
   mutate(name = fct_relevel(name,summary_data))%>%
   mutate(fldb_vessel_id = fct_relevel(fldb_vessel_id,ilo_summary_vessel$fldb_vessel_id)) %>%
   mutate(indicator_type = case_when(indicator_type=="case_info"~"Case status information",
@@ -1148,7 +1151,7 @@ ilo_indicator_fig <- combined_case_data %>%
         legend.position = "bottom",
         legend.direction = "horizontal") +
   labs(x = "Reported vessel case",y="") +
-  scale_fill_manual(values = c("gray30","gray80")) +
+  scale_fill_manual(values = c("gray30","gray80","white")) +
   guides(size = FALSE,
          fill = guide_legend(override.aes = list(size=4)))
 
