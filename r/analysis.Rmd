@@ -18,6 +18,8 @@ set.seed(101)
 # Necessary libraries
 library(tidyverse)
 library(tidymodels)
+library(ranger)
+library(kernlab)
 library(tictoc)
 library(workflows)
 library(countrycode)
@@ -531,7 +533,7 @@ vessels_fig_percentage <- predictions_figures %>%
                           gear=="squid_jigger" ~ "Squid jigger",
                           TRUE ~ "Trawler")) %>%
   ggplot(aes(x = year, y = fraction_high_risk)) +
-  geom_bar(stat="identity") +
+  geom_bar(stat="identity",color="black") +
   facet_grid(.~gear) +
   theme_bw()+
   scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
@@ -1067,13 +1069,14 @@ still_in_operation_stats <- vessel_operating_years %>%
             fraction_in_operation = n()/length(unique(vessel_operating_years$fldb_vessel_id)))
 
 operation_data <- vessel_operating_years %>%
-  mutate(`Operating in 2019` = ifelse(year == 2019,TRUE,NA),
-         `Operating in 2020`= ifelse(year == 2020,TRUE,NA)) %>%
-  dplyr::select(-mmsi,-year,-in_operation) %>%
-  pivot_longer(-fldb_vessel_id) %>%
-  filter(!is.na(value)) %>%
-  mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
-  mutate(indicator_type = "operation_years")
+  mutate(year = as.character(year),
+         fldb_vessel_id = as.character(fldb_vessel_id))%>%
+  left_join(training_df %>% 
+              filter(offender==1) %>%
+              dplyr::select(fldb_vessel_id,year,offender),
+            by = c("fldb_vessel_id","year")) %>%
+  dplyr::select(fldb_vessel_id,name=year,value=in_operation,offender)%>%
+  mutate(name = as.character(name)) 
 
 ilo_data <- fldb_data %>%
   dplyr::select(fldb_vessel_id,forced_labor_indicator)%>%
@@ -1083,7 +1086,8 @@ ilo_data <- fldb_data %>%
                                             TRUE ~ forced_labor_indicator)) %>%
   mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
   rename(name = forced_labor_indicator)%>%
-  mutate(indicator_type = "ilo_indicator")
+  mutate(indicator_type = "ilo_indicator") %>%
+  mutate(offender=as.factor(1))
 
 case_data <- fldb_data %>%
   dplyr::select(fldb_vessel_id,eyewitness_account,arrests_made,charges_filed,conviction_made,penalties_sanctioned) %>%
@@ -1096,7 +1100,8 @@ case_data <- fldb_data %>%
   filter(!is.na(value))  %>%
   mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
   mutate(indicator_type = "case_info") %>%
-  dplyr::select(-value)
+  dplyr::select(-value) %>%
+  mutate(offender=as.factor(1))
 
 combined_case_data <- bind_rows(ilo_data,case_data,operation_data)
 
@@ -1121,30 +1126,35 @@ case_summary_data <- rev(c("Eyewitness account",
                        "Conviction made",
                        "Penalties sanctioned"))
 
-operation_summary_data <- rev(c("Operating in 2019","Operating in 2020"))
-
-summary_data <- c(ilo_summary_data$name,case_summary_data,operation_summary_data)
+# Define factors for figure
+summary_data <- c(ilo_summary_data$name,case_summary_data,rev(sort(unique(vessel_operating_years$year))))
 
 ilo_indicator_fig <- combined_case_data %>%
+  mutate(`Training data label` = ifelse(is.na(offender),"Unlabaled","Positive")) %>%
   mutate(name = fct_relevel(name,summary_data))%>%
   mutate(fldb_vessel_id = fct_relevel(fldb_vessel_id,ilo_summary_vessel$fldb_vessel_id)) %>%
   mutate(indicator_type = case_when(indicator_type=="case_info"~"Case status information",
                                     indicator_type=="ilo_indicator" ~ "ILO forced labor indicator",
                                     TRUE ~ "Vessel operation status")) %>%
   mutate(indicator_type = fct_relevel(indicator_type,"ILO forced labor indicator")) %>%
-  ggplot(aes(x=fldb_vessel_id,y=name)) +
+  ggplot(aes(x=fldb_vessel_id,y=name,fill=`Training data label`)) +
   facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
-  geom_count() +
+  geom_count(shape = 21) +
   theme_bw() +
   theme(axis.text.x = element_blank(),
-        legend.position = "none",
+        #legend.position = "none",
         strip.background = element_blank(),
-        strip.text = element_text(hjust=0,angle = 0)) +
-  labs(x = "Case",y="")
+        strip.text = element_text(hjust=0,angle = 0),
+        legend.position = "bottom",
+        legend.direction = "horizontal") +
+  labs(x = "Reported vessel case",y="") +
+  scale_fill_manual(values = c("gray30","gray80")) +
+  guides(size = FALSE,
+         fill = guide_legend(override.aes = list(size=4)))
 
 ilo_indicator_fig
 
-ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=7.5,device="png",dpi=300)
 ```
 
 ## Paper stats
