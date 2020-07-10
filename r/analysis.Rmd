@@ -1114,7 +1114,7 @@ case_summary_data <- rev(c("Eyewitness account",
                        "Penalties sanctioned"))
 
 # Define factors for figure
-summary_data <- c(ilo_summary_data$name,case_summary_data,rev(sort(unique(training_df$year))))
+summary_data <- c(ilo_summary_data$name,case_summary_data,rev(seq(2012,2018)))
 
 ilo_indicator_fig <- combined_case_data %>%
   mutate(class = ifelse(class=="1","Positive","Negative") %>% fct_relevel("Positive")) %>%
