@@ -40,21 +40,38 @@ data_directory <- ifelse(Sys.info()["sysname"]=="Windows","G:/Shared\ drives/emL
                          "/Volumes/GoogleDrive/Shared\ drives/emLab/Projects/current-projects/forced-labor-and-fisheries/data/phase-1")
 
 # Read in cached data
-training_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
+main_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
   filter(!is.na(flag)) %>%
   # Only include gears for which we have known offenders
   filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
-  #dplyr::select(-years_until_caught) %>%
-  # Add unique id for every row
-  mutate(unique_id = row_number()) %>%
   # Make binaries into 1s/0s
   mutate(offender = ifelse(offender,1,0),
-         actual = offender,
          foc = ifelse(foc,1,0),
-         iuu = ifelse(iuu,1,0))%>%
-  # Only classify known offenders as positive in the year prior to being caught
-  mutate(offender = ifelse(offender == 1 & years_until_caught == 1,1,0)) %>%
+         iuu = ifelse(iuu,1,0)) 
+
+# Select only possible vessel years
+# Only classify known offenders as positive in the year prior to being caught
+positive_vessels <- main_df %>%
+  filter(offender == 1 & years_until_caught == 1) %>%
+  dplyr::select(mmsi,fldb_vessel_id,year,offender)
+
+filtered_main_df <- main_df %>%
+  # Only only include vessel-years from positives in the year prior to being caught
+  # Otherwise exclude them from training - they have high potential for being positive
+  dplyr::select(-fldb_vessel_id,-offender) %>%
+  left_join(positive_vessels,by=c("mmsi","year")) %>%
+  filter(!(mmsi %in% positive_vessels$mmsi & !offender)) %>%
   dplyr::select(-years_until_caught) %>%
+  # Make binaries into 1s/0s
+  mutate(offender = ifelse(is.na(offender),0,1),
+         foc = ifelse(foc,1,0),
+         iuu = ifelse(iuu,1,0))
+
+training_df <- filtered_main_df %>%
+  # Make these columns factors
+  mutate_at(
+     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
+     list(as.factor)) %>%
   # Add media source id
   # If it's not a known offender, create dummy ID for CV
   mutate(source_id = ifelse(offender != 1,
@@ -64,10 +81,19 @@ training_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
   # If it's not a known offender, create dummy ID for CV
   mutate(fldb_vessel_id = ifelse(offender != 1,
                             paste0("no_fldb_info_",row_number()),
-                            fldb_vessel_id)) %>%
+                            fldb_vessel_id))
+
+prediction_df <- main_df %>%
+  dplyr::select(-fldb_vessel_id,-offender) %>%
+  # Attach positive fldb_vessel_id to MMSIs, so we can see how these change over time
+  left_join(positive_vessels %>% dplyr::select(-year),by=c("mmsi")) %>%
+  mutate(offender = case_when(offender == 1 & years_until_caught == 1 ~ 1,
+                              is.na(offender) ~ 0,
+                              TRUE ~ 0)) %>%
+  dplyr::select(-years_until_caught) %>%
   # Make these columns factors
   mutate_at(
-     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender","actual","unique_id"),
+     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
      list(as.factor))
 
 # Bigquery project
@@ -82,8 +108,6 @@ fl_rec <- recipes::recipe(offender ~ ., data = head(training_df)) %>%
   recipes::update_role(mmsi, new_role = "id variable") %>%
   recipes::update_role(fldb_vessel_id, new_role = "id variable") %>%
   recipes::update_role(source_id, new_role = "id variable") %>%
-  recipes::update_role(unique_id, new_role = "id variable") %>%
-  recipes::update_role(actual, new_role = "id variable") %>%
   # Downsample unlabaled vessels
   # Skip=TRUE so that the testing dataset is not downsampled when baking
   # Do this at random every time
@@ -264,7 +288,7 @@ cv_performance_fig <- bag_performance %>%
   filter(!is.na(under_ratio) | number_bags ==1) %>%
   mutate(number_bags = paste0("Bags: ",number_bags) %>%
            fct_relevel(paste0("Bags: ",bags_to_show))) %>%
- mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
+mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
            fct_relevel("B")) %>%
   mutate(model_type=ifelse(model_type=="random-forest","Random forest","Support vector\nmachine")) %>%
   mutate(error_min = pmax(mean_performance-sd_performance,0),
@@ -348,9 +372,9 @@ predictions_final <- model_runs_final %>%
          predict = map(fit,function(x){
            tmp <- x %>%
              # Predict assessment data using fit
-             predict(training_df, type = "prob") %>%
+             predict(prediction_df, type = "prob") %>%
              # Add predictions to assessment data
-             bind_cols(training_df)%>%
+             bind_cols(prediction_df)%>%
              # Select relevant columns
              dplyr::select(mmsi,year,offender,.pred_1)
            # Increment progress bar
@@ -376,7 +400,7 @@ predictions_figures <- predictions_final %>%
     ungroup() %>% 
   mutate(mmsi = as.factor(mmsi),
          year = as.factor(year)) %>%
-  left_join(training_df %>%
+  left_join(prediction_df %>%
               dplyr::select(-offender),
             by=c("mmsi","year")) %>%
   mutate(Country = countrycode(flag,"iso3c","country.name"))%>%
@@ -563,21 +587,10 @@ ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,
 
 
 ```{r}
-training_df_figure <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
-  filter(!is.na(flag)) %>%
-  # Only include gears for which we have known offenders
-  filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
-  # Add unique id for every row
-  mutate(unique_id = row_number()) %>%
-  # Make binaries into 1s/0s
-  mutate(offender = ifelse(offender,1,0),
-         actual = offender,
-         foc = ifelse(foc,1,0),
-         iuu = ifelse(iuu,1,0))%>%
-  # Only classify known offenders as positie in the year prior to being caught
-  mutate(offender = ifelse(offender == 1 & years_until_caught == 1,1,0)) %>%
-  dplyr::select(-year,-flag,-actual,-source_id,-unique_id,-years_until_caught,-fldb_vessel_id) %>%
-  mutate(ais_type = ifelse(ais_type == "A",1,0)) 
+training_df_figure <- filtered_main_df %>%
+  mutate(ais_type = ifelse(ais_type == "A",1,0))%>%
+  dplyr::select(-year,-source_id,-fldb_vessel_id,-flag)
+
 
 asinh_trans <- function(){
   scales::trans_new(name = 'asinh', transform = function(x) asinh(x), 
@@ -1022,38 +1035,6 @@ ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,
 ```
 
 ```{r}
-sql<-"
-WITH
-  offenders AS(
-  SELECT
-    mmsi,
-    fldb_vessel_id
-  FROM
-    `ucsb-gfw.human_rights.risk_predictions`
-  WHERE
-    offender = 1),
-  vessel_info AS(
-  SELECT
-    CAST(ssvid AS INT64) mmsi,
-    year,
-    TRUE in_operation
-  FROM
-    `world-fishing-827.gfw_research.vi_ssvid_byyear_v20200701`)
-SELECT
-  *
-FROM
-  vessel_info
-JOIN
-  offenders
-USING
-  (mmsi)"
-bq_project_query(gfw_project, sql) %>%
-  bq_table_download(max_results = Inf) %>%
-  write_csv(here::here("interim_data/s9_vessel_operating_years.csv"))
-```
-
-
-```{r}
 # Make figure summarizing ILO indicators
 # Pull in forced labor vessel database
 fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))%>%
@@ -1063,20 +1044,20 @@ fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database
 vessel_operating_years <- read_csv(here::here("interim_data/s9_vessel_operating_years.csv"))
 
 # Summarize the number and fraction of forced labor vessels in operation during each number
-still_in_operation_stats <- vessel_operating_years %>%
+still_in_operation_stats <- predictions_figures %>%
+  filter(!is.na(fldb_vessel_id)) %>%
   group_by(year) %>%
   summarize(count_in_operation = n(),
             fraction_in_operation = n()/length(unique(vessel_operating_years$fldb_vessel_id)))
 
-operation_data <- vessel_operating_years %>%
-  mutate(year = as.character(year),
-         fldb_vessel_id = as.character(fldb_vessel_id))%>%
-  left_join(training_df %>% 
-              filter(offender==1) %>%
-              dplyr::select(fldb_vessel_id,year,offender),
-            by = c("fldb_vessel_id","year")) %>%
-  dplyr::select(fldb_vessel_id,name=year,value=in_operation,offender)%>%
-  mutate(name = as.character(name)) 
+operation_data <- predictions_figures %>%
+  filter(!is.na(fldb_vessel_id))%>% 
+  dplyr::select(fldb_vessel_id,name=year,offender,class,mmsi)%>%
+  mutate(mmsi=as.factor(mmsi))%>%
+  mutate(offender=as.factor(offender),
+         class=as.factor(class))%>%
+  mutate(fldb_vessel_id = as.character(fldb_vessel_id))%>%
+  mutate(indicator_type = "operation_status")
 
 ilo_data <- fldb_data %>%
   dplyr::select(fldb_vessel_id,forced_labor_indicator)%>%
@@ -1087,7 +1068,8 @@ ilo_data <- fldb_data %>%
   mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
   rename(name = forced_labor_indicator)%>%
   mutate(indicator_type = "ilo_indicator") %>%
-  mutate(offender=as.factor(1))
+  mutate(offender=as.factor(1),
+         class=as.factor(1))
 
 case_data <- fldb_data %>%
   dplyr::select(fldb_vessel_id,eyewitness_account,arrests_made,charges_filed,conviction_made,penalties_sanctioned) %>%
@@ -1101,7 +1083,8 @@ case_data <- fldb_data %>%
   mutate(fldb_vessel_id = as.character(fldb_vessel_id)) %>%
   mutate(indicator_type = "case_info") %>%
   dplyr::select(-value) %>%
-  mutate(offender=as.factor(1))
+  mutate(offender=as.factor(1),
+         class=as.factor(1))
 
 combined_case_data <- bind_rows(ilo_data,case_data,operation_data)
 
@@ -1130,30 +1113,28 @@ case_summary_data <- rev(c("Eyewitness account",
 summary_data <- c(ilo_summary_data$name,case_summary_data,rev(sort(unique(vessel_operating_years$year))))
 
 ilo_indicator_fig <- combined_case_data %>%
-  mutate(`Training data label` = case_when(name == "2020" | name == "2019" ~ "Not included in training",
-                                           is.na(offender) ~ "Unlabaled",
-                                           TRUE ~ "Positive")) %>%
-  mutate(`Training data label` = fct_relevel(`Training data label`,c("Positive","Unlabaled"))) %>%
+  mutate(class = ifelse(class=="1","Positive","Negative") %>% fct_relevel("Positive")) %>%
+  mutate(offender = ifelse(offender=="1","Positive","Not included")%>% fct_relevel("Positive")) %>%
   mutate(name = fct_relevel(name,summary_data))%>%
   mutate(fldb_vessel_id = fct_relevel(fldb_vessel_id,ilo_summary_vessel$fldb_vessel_id)) %>%
   mutate(indicator_type = case_when(indicator_type=="case_info"~"Case status information",
                                     indicator_type=="ilo_indicator" ~ "ILO forced labor indicator",
-                                    TRUE ~ "Vessel operation status")) %>%
+                                    TRUE ~ "Vessel operation status and model classification")) %>%
   mutate(indicator_type = fct_relevel(indicator_type,"ILO forced labor indicator")) %>%
-  ggplot(aes(x=fldb_vessel_id,y=name,fill=`Training data label`)) +
+  ggplot(aes(x=fldb_vessel_id,y=name,fill=class,color=offender)) +
   facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
-  geom_count(shape = 21) +
+  geom_count(shape = 21,stroke=1.1) +
   theme_bw() +
   theme(axis.text.x = element_blank(),
-        #legend.position = "none",
-        strip.background = element_blank(),
-        strip.text = element_text(hjust=0,angle = 0),
         legend.position = "bottom",
-        legend.direction = "horizontal") +
+        strip.background = element_blank(),
+        strip.text = element_text(hjust=0,angle = 0)) +
   labs(x = "Reported vessel case",y="") +
-  scale_fill_manual(values = c("gray30","gray80","white")) +
+  scale_color_manual("Training data label",values = c("red","black")) +
+  scale_fill_manual("Model classification",values = c("gray30","gray80")) +
   guides(size = FALSE,
-         fill = guide_legend(override.aes = list(size=4)))
+         fill = guide_legend(override.aes = list(size=4),nrow=2),
+         color = guide_legend(override.aes = list(size=4),nrow=2,order = 1))
 
 ilo_indicator_fig
 
