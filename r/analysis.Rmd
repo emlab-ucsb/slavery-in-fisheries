@@ -68,10 +68,6 @@ filtered_main_df <- main_df %>%
          iuu = ifelse(iuu,1,0))
 
 training_df <- filtered_main_df %>%
-  # Make these columns factors
-  mutate_at(
-     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
-     list(as.factor)) %>%
   # Add media source id
   # If it's not a known offender, create dummy ID for CV
   mutate(source_id = ifelse(offender != 1,
@@ -81,7 +77,11 @@ training_df <- filtered_main_df %>%
   # If it's not a known offender, create dummy ID for CV
   mutate(fldb_vessel_id = ifelse(offender != 1,
                             paste0("no_fldb_info_",row_number()),
-                            fldb_vessel_id))
+                            fldb_vessel_id)) %>%
+  # Make these columns factors
+  mutate_at(
+     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
+     list(as.factor)) 
 
 prediction_df <- main_df %>%
   dplyr::select(-fldb_vessel_id,-offender) %>%
@@ -446,7 +446,8 @@ write_csv(importance_data,here::here("interim_data/s8_figure_s5_data.csv"))
 # Make figures
 
 ```{r}
-predictions_figures <- read_csv(here::here("interim_data/s4_final_model_predictions.csv"))
+predictions_figures <- read.csv(here::here("interim_data/s4_final_model_predictions.csv"),stringsAsFactors = FALSE) %>%
+  as_tibble()
 ```
 
 ## Variable importance
@@ -1039,23 +1040,23 @@ ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,
 # Pull in forced labor vessel database
 fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))%>%
   # Filter to just those cases that were used in the analysis
-  filter(fldb_vessel_id %in% (training_df %>% filter(offender==1) %>% .$fldb_vessel_id))
-
-vessel_operating_years <- read_csv(here::here("interim_data/s9_vessel_operating_years.csv"))
+  filter(fldb_vessel_id %in% positive_vessels$fldb_vessel_id)
 
 # Summarize the number and fraction of forced labor vessels in operation during each number
 still_in_operation_stats <- predictions_figures %>%
   filter(!is.na(fldb_vessel_id)) %>%
   group_by(year) %>%
   summarize(count_in_operation = n(),
-            fraction_in_operation = n()/length(unique(vessel_operating_years$fldb_vessel_id)))
+            fraction_in_operation = n()/nrow(positive_vessels))
 
 operation_data <- predictions_figures %>%
+  as_tibble() %>%
   filter(!is.na(fldb_vessel_id))%>% 
   dplyr::select(fldb_vessel_id,name=year,offender,class,mmsi)%>%
   mutate(mmsi=as.factor(mmsi))%>%
   mutate(offender=as.factor(offender),
-         class=as.factor(class))%>%
+         class=as.factor(class),
+         name = as.factor(name))%>%
   mutate(fldb_vessel_id = as.character(fldb_vessel_id))%>%
   mutate(indicator_type = "operation_status")
 
@@ -1072,9 +1073,11 @@ ilo_data <- fldb_data %>%
          class=as.factor(1))
 
 case_data <- fldb_data %>%
-  dplyr::select(fldb_vessel_id,eyewitness_account,arrests_made,charges_filed,conviction_made,penalties_sanctioned) %>%
+  dplyr::select(fldb_vessel_id,eyewitness_account,official_investigation,non_official_investigations,arrests_made,charges_filed,conviction_made,penalties_sanctioned) %>%
   rename(`Penalties sanctioned` = penalties_sanctioned,
          `Eyewitness account` = eyewitness_account,
+         `Official investigation` = official_investigation,
+         `Non-official investigation` = non_official_investigations,
          `Arrests made` = arrests_made,
          `Charges filed` = charges_filed,
          `Conviction made` = conviction_made) %>%
@@ -1103,6 +1106,7 @@ ilo_summary_vessel<- ilo_data %>%
 
 # Summarize data by case info, for organizing figure
 case_summary_data <- rev(c("Eyewitness account",
+                           "Non-official investigation",
                        "Official investigation",
                        "Arrests made",
                        "Charges filed",
@@ -1110,7 +1114,7 @@ case_summary_data <- rev(c("Eyewitness account",
                        "Penalties sanctioned"))
 
 # Define factors for figure
-summary_data <- c(ilo_summary_data$name,case_summary_data,rev(sort(unique(vessel_operating_years$year))))
+summary_data <- c(ilo_summary_data$name,case_summary_data,rev(sort(unique(training_df$year))))
 
 ilo_indicator_fig <- combined_case_data %>%
   mutate(class = ifelse(class=="1","Positive","Negative") %>% fct_relevel("Positive")) %>%
