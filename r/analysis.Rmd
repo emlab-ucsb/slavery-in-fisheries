@@ -545,7 +545,7 @@ vessels_fig_total <- predictions_figures  %>%
   disco::scale_fill_disco(palette = "rainbow", "Flag") +
   facet_grid(.~gear)+
   scale_y_continuous(labels=scales::comma)+ 
-  scale_x_discrete(breaks = unique(predictions_figures$year)) +
+  scale_x_continuous(breaks = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.minor = element_blank())
@@ -562,7 +562,8 @@ vessels_fig_percentage <- predictions_figures %>%
   facet_grid(.~gear) +
   theme_bw()+
   scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
-  scale_x_discrete(breaks = unique(predictions_figures$year)) +
+  scale_x_continuous(breaks = unique(predictions_figures$year),
+                   labels = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.minor = element_blank())+
