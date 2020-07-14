@@ -540,7 +540,7 @@ vessels_fig_total <- predictions_figures  %>%
   ggplot(aes(x = year, y = `Number of vessels`, fill = Country)) +
   geom_bar(stat = "identity", color = "black",size=0.25) +
   #coord_flip() +
-  labs(x="",title="Number of high-risk vessels",y="") +
+  labs(x="",title="(A) Number of high-risk vessels",y="") +
   theme_bw() +
   disco::scale_fill_disco(palette = "rainbow", "Flag") +
   facet_grid(.~gear)+
@@ -566,7 +566,7 @@ vessels_fig_percentage <- predictions_figures %>%
   theme(strip.background =element_rect(fill=NA),
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.minor = element_blank())+
-  labs(x="",title="Percentage of total vessels that are high-risk",y="")
+  labs(x="",title="(B) Percentage of total vessels that are high-risk",y="")
 
 legend <- get_legend(
   # create some space to the left of the legend
@@ -1121,11 +1121,11 @@ ilo_indicator_fig <- combined_case_data %>%
   mutate(offender = ifelse(offender=="1","Positive","Not included")%>% fct_relevel("Positive")) %>%
   mutate(name = fct_relevel(name,summary_data))%>%
   mutate(fldb_vessel_id = fct_relevel(fldb_vessel_id,ilo_summary_vessel$fldb_vessel_id)) %>%
-  mutate(indicator_type = case_when(indicator_type=="case_info"~"Case status information",
-                                    indicator_type=="ilo_indicator" ~ "ILO forced labor indicator",
-                                    TRUE ~ "Vessel operation status and model classification")) %>%
+  mutate(indicator_type = case_when(indicator_type=="case_info"~"(B) Case status information",
+                                    indicator_type=="ilo_indicator" ~ "(A) ILO forced labor indicator",
+                                    TRUE ~ "(C) Vessel operation status and model classification")) %>%
   mutate(indicator_type = fct_relevel(indicator_type,"ILO forced labor indicator")) %>%
-  ggplot(aes(x=fldb_vessel_id,y=name,fill=class,color=offender)) +
+  ggplot(aes(x=fldb_vessel_id,y=name,fill=interaction(class,indicator_type),color=interaction(offender,indicator_type))) +
   facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
   geom_count(shape = 21,stroke=1.1) +
   theme_bw() +
@@ -1134,8 +1134,12 @@ ilo_indicator_fig <- combined_case_data %>%
         strip.background = element_blank(),
         strip.text = element_text(hjust=0,angle = 0)) +
   labs(x = "Reported vessel case",y="") +
-  scale_color_manual("Training data label",values = c("red","black")) +
-  scale_fill_manual("Model classification",values = c("gray30","gray80")) +
+  scale_color_manual("(C) Training\ndata label",values = c("black","black","red","black"),
+                     breaks = c("Positive.(C) Vessel operation status and model classification","Not included.(C) Vessel operation status and model classification"),
+                     labels = c("Positive","Not included")) +
+  scale_fill_manual("(C) Model\nclassification",values = c("black","black","gray30","gray80"),
+                     breaks = c("Positive.(C) Vessel operation status and model classification","Negative.(C) Vessel operation status and model classification"),
+                     labels = c("Positive","Negative")) +
   guides(size = FALSE,
          fill = guide_legend(override.aes = list(size=4),nrow=2),
          color = guide_legend(override.aes = list(size=4),nrow=2,order = 1))
