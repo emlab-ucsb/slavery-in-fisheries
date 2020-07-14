@@ -547,7 +547,7 @@ vessels_fig_total <- predictions_figures  %>%
   scale_y_continuous(labels=scales::comma)+ 
   scale_x_continuous(breaks = unique(predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
-        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.x = element_blank(),
         panel.grid.minor = element_blank())
 
 vessels_fig_percentage <- predictions_figures %>%
