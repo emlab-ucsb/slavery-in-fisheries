@@ -1039,9 +1039,7 @@ ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,
 ```{r}
 # Make figure summarizing ILO indicators
 # Pull in forced labor vessel database
-fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))%>%
-  # Filter to just those cases that were used in the analysis
-  filter(fldb_vessel_id %in% positive_vessels$fldb_vessel_id)
+fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))
 
 # Summarize the number and fraction of forced labor vessels in operation during each number
 still_in_operation_stats <- predictions_figures %>%
