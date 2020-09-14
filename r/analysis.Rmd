@@ -909,6 +909,7 @@ sql <- "WITH
   risk_predictions AS(
   SELECT
     class,
+    offender,
     gear,
     year,
     mmsi
@@ -939,6 +940,7 @@ sql <- "WITH
     port_iso3,
     COUNT(*) total_visits,
     SUM(class) high_risk_visits,
+    SUM(offender) known_offender_visits,
     SUM(class) / COUNT(*) fraction_high_risk_visits
   FROM
     joined
