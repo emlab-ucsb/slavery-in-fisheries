@@ -971,20 +971,27 @@ sql <- "SELECT *
 port_data <- bq_project_query(gfw_project, sql) %>%
   bq_table_download(max_results = Inf)
 
-write_csv(port_data %>%
-            filter(year==2018),path=here::here("interim_data/s6_figure_4_data.csv"))
+write_csv(port_data,path=here::here("interim_data/s6_figure_4_data.csv"))
 ```
 
 ```{r}
 port_data <- read_csv(here::here("interim_data/s6_figure_4_data.csv")) %>%
   filter(!is.na(port_iso3))
 
+# For each port country, determine if there were any visits over the entire time frame
+port_data_has_known_offender_visits <- port_data %>%
+  group_by(port_iso3) %>%
+  summarize(has_known_offender_visits = ifelse(sum(known_offender_visits,na.rm=TRUE)>0,TRUE,FALSE)) %>%
+  ungroup()
+
 world_land_ports <- world_land %>% 
   as_tibble() %>%
   mutate(port_iso3 = as.character(ISO3.1)) %>%
   dplyr::select(geometry,port_iso3) %>%
-  inner_join(port_data,by="port_iso3") %>%
-  st_as_sf()
+  inner_join(port_data %>%
+               filter(year==2018),by="port_iso3") %>%
+  st_as_sf() %>%
+  left_join(port_data_has_known_offender_visits,by= c("port_iso3"))
 
 countries_at_risk <- port_data %>% filter(fraction_high_risk_visits >0) %>% 
   mutate(country = countrycode(port_iso3,"iso3c","country.name")) %>% distinct(country) %>% arrange(country)
@@ -1009,11 +1016,13 @@ port_map_figure_rel <-   world_land_ports %>%
   ggplot() +
   geom_sf(data = world_land, fill = "grey45", color = "grey45") +
   geom_sf(aes(
-    fill = fraction_high_risk_visits
+    fill = fraction_high_risk_visits,
+    color = has_known_offender_visits
   ),
-    color = "grey40",
     size=0.1) +
   scale_fill_gradientn(name = "Percentage\nport visits\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  scale_color_manual("Has known positive\nport visits",
+                     values = c("grey40","white")) +
   theme_minimal() +
   theme(panel.background = element_rect(fill="black"),
         panel.grid.major = element_line(colour = "black"),
@@ -1023,14 +1032,17 @@ port_map_figure_rel <-   world_land_ports %>%
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         text = element_text(size=15),
-        legend.direction = "vertical"
+        legend.direction = "vertical",
+        legend.key = element_rect(fill = "black")
   ) +
   labs(
     x = "",
     y = ""
   ) + 
   ylim(c(-70, NA)) +
-  facet_wrap(.~gear,ncol=1)
+  facet_wrap(.~gear,ncol=1)+ 
+  guides(color = guide_legend(override.aes = list(size = 1,
+                                                  fill = "black")))
 
 #port_map_figure <- cowplot::plot_grid(port_map_figure_abs,port_map_figure_rel)
 port_map_figure_rel
