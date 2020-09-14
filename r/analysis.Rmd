@@ -978,11 +978,30 @@ write_csv(port_data,path=here::here("interim_data/s6_figure_4_data.csv"))
 port_data <- read_csv(here::here("interim_data/s6_figure_4_data.csv")) %>%
   filter(!is.na(port_iso3))
 
-# For each port country, determine if there were any visits over the entire time frame
-port_data_has_known_offender_visits <- port_data %>%
+# For each port country, summarize if there were known offender visits and predicted high-risk visits
+port_visit_summary <- port_data %>%
   group_by(port_iso3) %>%
   summarize(has_known_offender_visits = ifelse(sum(known_offender_visits,na.rm=TRUE)>0,TRUE,FALSE)) %>%
   ungroup()
+
+# For remaining analyis, just look at 2018
+port_data <- port_data %>%
+  filter(year==2018) %>%
+  left_join(port_data_has_known_offender_visits,by= c("port_iso3"))
+
+# How many countries had visits by known offenders in the 2012-2018 time frame
+port_data%>%
+  filter(has_known_offender_visits) %>%
+  .$port_iso3 %>%
+  unique() %>%
+  length()
+
+# How many countries have high-risk visits, but no known offender visits
+port_data %>%
+  filter(high_risk_visits>0 & !has_known_offender_visits) %>%
+  .$port_iso3 %>%
+  unique() %>%
+  length()
 
 world_land_ports <- world_land %>% 
   as_tibble() %>%
@@ -990,8 +1009,7 @@ world_land_ports <- world_land %>%
   dplyr::select(geometry,port_iso3) %>%
   inner_join(port_data %>%
                filter(year==2018),by="port_iso3") %>%
-  st_as_sf() %>%
-  left_join(port_data_has_known_offender_visits,by= c("port_iso3"))
+  st_as_sf()
 
 countries_at_risk <- port_data %>% filter(fraction_high_risk_visits >0) %>% 
   mutate(country = countrycode(port_iso3,"iso3c","country.name")) %>% distinct(country) %>% arrange(country)
