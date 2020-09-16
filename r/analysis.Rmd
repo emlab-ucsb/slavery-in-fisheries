@@ -100,6 +100,7 @@ prediction_df <- main_df %>%
 ucsb_project <- "ucsb-gfw"
 # Use GFW account, but only for this project
 gfw_project <- "world-fishing-827"
+options(scipen = 20)
 ```
 
 ```{r eval = FALSE}
@@ -673,6 +674,7 @@ ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5
 # Upload risk predictions
 bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
   bq_table_upload(values = predictions_figures %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear,fldb_vessel_id),
+                  fields = as_bq_fields(watson_countries_processed),
                   write_disposition = "WRITE_TRUNCATE")
 
 sql <- "#standardSQL
@@ -987,7 +989,7 @@ port_visit_summary <- port_data %>%
 # For remaining analyis, just look at 2018
 port_data <- port_data %>%
   filter(year==2018) %>%
-  left_join(port_data_has_known_offender_visits,by= c("port_iso3"))
+  left_join(port_visit_summary,by= c("port_iso3"))
 
 # How many countries had visits by known offenders in the 2012-2018 time frame
 port_data%>%
@@ -1190,7 +1192,7 @@ n_predicted_positive_vessel_years_new <- predictions_figures %>%
   filter(Prediction == "Positive" & Label == "Unlabeled") %>%
   nrow()
 
-fraction_positive_vessel_years <- n_predicted_positive_vessel_years / nrow(training_df)
+fraction_positive_vessel_years <- n_predicted_positive_vessel_years / nrow(predictions_figures)
 
 
 n_predicted_positive_vessels <- predictions_figures %>%
