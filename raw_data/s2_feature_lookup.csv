@@ -1,0 +1,32 @@
+indicator,indicator_name,indicator_type
+ais_type,AIS device type,directly_observed
+average_daily_fishing_hours,Average daily fishing hours,gfw_fishing_model
+crew_size,Crew size,registry_or_gfw_vessel_model
+distance_traveled_km,Distance traveled (km),directly_observed
+encounters,Number of suspected transshipment events,directly_observed
+engine_power_kw,Vessel engine power (kw),registry_or_gfw_vessel_model
+fishing_hours,Fishing hours,gfw_fishing_model
+fishing_hours_foreign_eez,Fishing hours in foreign EEZs,gfw_fishing_model
+fishing_hours_high_seas,Fishing hours in high seas,gfw_fishing_model
+foc,Flies flag of convenience,directly_observed
+foreign_port_visits,Number of foreign port visits,directly_observed
+gaps_12_hours,Number of AIS gaps greater than 12 hours,directly_observed
+gaps_24_hours,Number of AIS gaps greater than 24 hours,directly_observed
+hours,Hours at sea,directly_observed
+iuu,Vessel on official IUU fishing list,directly_observed
+length_m,Vessel length (m),registry_or_gfw_vessel_model
+max_distance_from_port_km,Maximum distance from port (km),directly_observed
+max_distance_from_shore_km,Maximum distance from shore (km),directly_observed
+number_forced_labor_encounters,Number of suspected transshipment events with forced labor vessels,directly_observed
+number_poc_port_visits,Number of visits to ports of convenience,directly_observed
+number_port_visits,Number of port visits,directly_observed
+tonnage_gt,Vessel tonnage (gt),registry_or_gfw_vessel_model
+number_encounters,Number of suspected transshipment events with other vessels,directly_observed
+positions,Number of AIS position messages,directly_observed
+number_iuu_encounters,Number of suspected transshipment events with IUU vessels,directly_observed
+number_foreign_port_visits,Number of foreign port visits,directly_observed
+number_voyages,Number of voyages,directly_observed
+average_encounter_duration_hours,Average suspected transshipment event duration (hours),directly_observed
+average_voyage_duration_hours,Average voyage duration (hours),directly_observed
+average_loitering_duration_hours,Average loitering duration (hours),directly_observed
+number_loitering_events,Number of loitering events,directly_observed
