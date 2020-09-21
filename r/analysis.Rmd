@@ -101,6 +101,9 @@ ucsb_project <- "ucsb-gfw"
 # Use GFW account, but only for this project
 gfw_project <- "world-fishing-827"
 options(scipen = 20)
+
+# Read in feature lookup table
+feature_lookup <- read_csv(here::here("raw_data/s2_feature_lookup.csv"))
 ```
 
 ```{r eval = FALSE}
@@ -413,7 +416,7 @@ predictions_figures <- predictions_final %>%
 # Save final predictions
 write_csv(predictions_figures,here::here("interim_data/s4_final_model_predictions.csv"))
 
-vessel_lookup <- read_csv(here::here("raw_data/s2_indicator_lookup.csv"))
+
 
 # Get average variable importance across bags
 
@@ -429,7 +432,7 @@ importance_data <- predictions_final %>%
   group_by(Feature) %>%
   summarize(Importance=mean(Importance,na.rm=TRUE)) %>%
   ungroup() %>%
-  left_join(vessel_lookup %>%
+  left_join(feature_lookup %>%
               rename(Feature = indicator),by="Feature") %>%
   mutate(indicator_name = case_when(Feature == "gear_squid_jigger" ~ "Squid jigger",
                                     Feature == "gear_drifting_longlines" ~ "Longliner",
@@ -612,8 +615,11 @@ indicator_figure_data <- recipes::recipe(offender ~ ., data = head(training_df_f
   mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
                           gear=="squid_jigger" ~ "Squid jigger",
                           TRUE ~ "Trawler")) %>%
-    left_join(vessel_lookup,by="indicator") %>%
-  mutate(offender=ifelse(offender==1,"Positive","Unlabeled")) 
+    left_join(feature_lookup,by="indicator") %>%
+  mutate(offender=ifelse(offender==1,"Positive","Unlabeled"))  %>%
+  mutate(indicator_type = case_when(indicator_type =="directly_observed" ~ "Directly\nobserved",
+                                    indicator_type =="gfw_fishing_model" ~ "GFW\nfishing\nalgorithm",
+                                    indicator_type =="registry_or_gfw_vessel_model" ~ "Vessel\nregistry\nor GFW\nvessel\nalgorithm"))
 
 indicator_figure <- indicator_figure_data %>%
   ggplot(aes(x = reorder(indicator_name,desc(indicator_name)),y=value,color=factor(offender))) +
@@ -621,7 +627,9 @@ indicator_figure <- indicator_figure_data %>%
   disco::scale_color_disco(palette = "vibrant", "Training data label",direction=1,alpha=1,
                            guide = guide_legend(reverse = TRUE) ) +
   coord_flip() +
-  facet_grid(.~gear) +
+  facet_grid_paginate(indicator_type~gear,drop=TRUE,space="free",scales="free_y") +
+  #facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
+  #facet_grid(indicator_type~gear,scales="free_y") +
   scale_y_continuous(trans="asinh",breaks = scales::pretty_breaks(2)) +
     labs(
       x = "",
@@ -631,6 +639,7 @@ indicator_figure <- indicator_figure_data %>%
   theme(axis.text.x = element_text(angle = 90, hjust = 1,size=8),
         legend.position = "bottom",
         legend.direction = "horizontal",
+        strip.text.y.right = element_text(angle = 0),
         strip.background =element_rect(fill=NA))
 
 indicator_figure
@@ -1073,7 +1082,7 @@ ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,
 ```{r}
 # Make figure summarizing ILO indicators
 # Pull in forced labor vessel database
-fldb_data <-read_csv(here::here("interim_data/s3_suspected_forced_labor_database.csv"))
+fldb_data <-read_csv(here::here("raw_data/s3_suspected_forced_labor_database.csv"))
 
 # Summarize the number and fraction of forced labor vessels in operation during each number
 still_in_operation_stats <- predictions_figures %>%
