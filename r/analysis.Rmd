@@ -684,7 +684,7 @@ ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5
 # Upload risk predictions
 bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
   bq_table_upload(values = predictions_figures %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear,fldb_vessel_id),
-                  fields = as_bq_fields(watson_countries_processed),
+                  fields = as_bq_fields(predictions_figures),
                   write_disposition = "WRITE_TRUNCATE")
 
 sql <- "#standardSQL
