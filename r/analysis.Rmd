@@ -414,7 +414,8 @@ predictions_figures <- predictions_final %>%
   mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
 
 # Save final predictions
-write_csv(predictions_figures,here::here("interim_data/s4_final_model_predictions.csv"))
+write_csv(predictions_figures %>%
+            dplyr::select(-mmsi),here::here("interim_data/s4_final_model_predictions.csv"))
 
 
 
