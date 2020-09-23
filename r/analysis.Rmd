@@ -1,21 +1,27 @@
 ---
-title: "Forced labor final model building and predictions"
-author: "Gavin McDonald - Sustainable Fisheries Group"
+title: "Analysis for: Satellites reveal global extent of forced labor in the world’s fishing fleet"
+author: "Gavin McDonald - Environmental Market Solutions Lab (emLab)"
 date: '`r format(Sys.time(), "%m/%d/%Y")`'
 output: 
   pdf_document: 
     toc: yes
 editor_options: 
   chunk_output_type: console
+params:
+     run_analysis: FALSE
+     run_robustness: FALSE
+     generate_figures: FALSE
+     generate_stats: TRUE
+     use_big_query: FALSE
 ---
 
 ```{r echo = FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.height=9.5, fig.width=7.5)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.height=7.5, fig.width=7.5,eval=FALSE)
 ```
 
-```{r}
+```{r eval = TRUE}
 set.seed(101)
-# Necessary libraries
+# Load Necessary libraries
 library(tidyverse)
 library(tidymodels)
 library(ranger)
@@ -30,6 +36,11 @@ library(rworldmap)
 library(ggforce)
 library(anonymizer)
 library(cowplot)
+```
+
+# Analysis
+
+```{r eval = (params$run_analysis | params$generate_figures)}
 # Load custom threshold_perf function, adapted from probably::threshold_perf to give different metrics
 source(here::here("r/threshold_perf_custom.R"))
 
@@ -97,17 +108,11 @@ prediction_df <- main_df %>%
      vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
      list(as.factor))
 
-# Bigquery project
-ucsb_project <- "ucsb-gfw"
-# Use GFW account, but only for this project
-gfw_project <- "world-fishing-827"
-options(scipen = 20)
-
 # Read in feature lookup table
 feature_lookup <- read_csv(here::here("raw_data/s2_feature_lookup.csv"))
 ```
 
-```{r eval = FALSE}
+```{r}
 # Recipe for processing data within each sampling iteration
 fl_rec <- recipes::recipe(offender ~ ., data = head(training_df)) %>%
   recipes::update_role(mmsi, new_role = "id variable") %>%
@@ -134,7 +139,7 @@ fl_rec <- recipes::recipe(offender ~ ., data = head(training_df)) %>%
   recipes::step_scale(all_numeric())
 ```
 
-```{r eval = FALSE}
+```{r}
 # Define model specs
 # Random forest
 # Use default hyperparameters
@@ -150,7 +155,7 @@ svm_mod <- svm_rbf(mode = "classification") %>%
   set_engine("kernlab",scaled=FALSE)
 ```
 
-```{r eval = FALSE}
+```{r}
 # Cross-validation
 # Ensure there is no splitting across source_id (and consequently fldb_vessel_id) across analysis and assessment datasets
 set.seed(101)
@@ -232,7 +237,7 @@ predictions <- model_runs %>%
 write_csv(predictions,paste0(data_directory,"/tidy_cv_predictions.csv"))
 ```
 
-```{r eval = FALSE}
+```{r}
 # Load cached CV results
 predictions <- read_csv(paste0(data_directory,"/tidy_cv_predictions.csv"))
 bags_to_show <- c(1,10,50,100)
@@ -287,40 +292,6 @@ write_csv(bag_performance,here::here("interim_data/s7_figure_s3_data.csv"))
 ```
 
 ```{r}
-# Read in cached bag performance
-bag_performance <- read_csv(here::here("interim_data/s7_figure_s3_data.csv"))
-cv_performance_fig <- bag_performance %>%
-  filter(!is.na(under_ratio) | number_bags ==1) %>%
-  mutate(number_bags = paste0("Bags: ",number_bags) %>%
-           fct_relevel(paste0("Bags: ",bags_to_show))) %>%
-mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
-           fct_relevel("B")) %>%
-  mutate(model_type=ifelse(model_type=="random-forest","Random forest","Support vector\nmachine")) %>%
-  mutate(error_min = pmax(mean_performance-sd_performance,0),
-         error_max = ifelse(.metric=="recall",pmin(mean_performance+sd_performance,1),mean_performance+sd_performance)) %>%
-#  filter(.metric %in% c("recall","modified_f1")) %>% 
-    mutate(.metric = case_when(.metric=="recall"~"Recall",
-                               .metric=="modified_f1"~"Modified F1",
-                               TRUE~"Detection\nprevalence")) %>%
-  mutate(.metric = fct_relevel(.metric,"Recall","Detection\nprevalence")) %>%
-  ggplot(aes(x = factor(under_ratio),y=mean_performance,color=model_type)) + 
-  geom_point(position=position_dodge(width=0.75)) +
-  geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.75),width=0.5) + 
-  facet_grid(.metric~number_bags,scales="free_y",switch="y") +
-  labs(x = "Downsampling ratio",
-       y = "Mean\nacross\nfolds")+ 
-  theme_bw() +
-  theme(strip.background =element_rect(fill=NA),
-        axis.title.y = element_text(angle=0,vjust=0.5),
-        strip.text.y.left = element_text(angle=0,vjust=0.5)) +
-  disco::scale_color_disco("Model type")
-
-cv_performance_fig
-
-ggsave(here::here("output_figures/figure_s3.png"),cv_performance_fig,width=7.5,height=7.5,device="png",dpi=300)
-```
-
-```{r}
 # Here we choose the optimzed model
 # Non-bagging version has standard error too large
 # Stick with 5 bags to reduce variation
@@ -338,7 +309,7 @@ cv_performance <- bag_performance %>%
 optimized_model$.threshold <- cv_performance$.threshold[1]
 ```
 
-```{r eval = FALSE}
+```{r}
 # Train final model on full dataset
 set.seed(101)
 # Define all model runs
@@ -452,256 +423,28 @@ importance_data <- predictions_final %>%
 write_csv(importance_data,here::here("interim_data/s8_figure_s5_data.csv"))
 ```
 
-# Make figures
 
-```{r}
-predictions_figures <- read.csv(here::here("interim_data/s4_final_model_predictions.csv"),stringsAsFactors = FALSE) %>%
-  as_tibble()
-```
-
-## Variable importance
-```{r}
-importance_fig <- read_csv(here::here("interim_data/s8_figure_s5_data.csv")) %>%
-  ggplot(aes(x = reorder(indicator_name,Importance), y = Importance)) +
-  geom_bar(stat = "identity",color="black") +
-  coord_flip() +
-  labs(x = "",
-       y = "Mean importance across bags") +
-  theme_bw() +
-  theme(panel.grid.minor = element_blank())
-
-importance_fig
-
-ggsave(here::here("output_figures/figure_s5.png"),importance_fig,width=7.5,height=5,device="png",dpi=300)
-```
-
-## Classification by training label
-
-```{r}
-n_fun <- function(x){
-  return(data.frame(y = max(x) + 0.05, label = paste0("n = ",prettyNum(length(x),big.mark=","))))
-}
-
-class_fig <- predictions_figures  %>%
-  ggplot(aes(x=Prediction,y=.pred_1,fill=Label)) + 
-  geom_boxplot(position = position_dodge(width = 0.75)) + 
-  coord_flip() + 
-  geom_hline(yintercept = optimized_model$.threshold,linetype=2) +
-  labs(y = "Model risk score",
-       x = "Model\nclassification")+
-    stat_summary(fun.data = n_fun, geom = "label",position = position_dodge(width = 0.75),show.legend = FALSE) +
-  ylim(c(0,1)) +
-  disco::scale_fill_disco(palette = "vibrant", "Training data\nlabel",direction=1,alpha=1,
-                           guide = guide_legend(reverse = TRUE) ) +
-  theme_bw() +
-  theme(axis.title.y = element_text(angle=0,vjust=0.5))
-
-class_fig
-
-ggsave(here::here("output_figures/figure_s4.png"),class_fig,width=7.5,height=3.5,device="png",dpi=300)
-```
-
-## High risk vessels and crew over time
-
-```{r}
-# What is the number of unique high-risk vessels (vessels that were high-risk during at least 1 year)?
-number_high_risk_vessels <- predictions_figures %>%
-    filter(class ==1) %>%
-    .$mmsi_anonymous %>% unique() %>% length()
-
-# What is the fraction of unique vessels that were high-risk during at least 1 year?
-fraction_high_risk_vessels <- number_high_risk_vessels /
-  (predictions_figures %>%
-    .$mmsi_anonymous %>% unique() %>% length())
-
-# What is the number of potentially affected crew that were on high-risk vessels?
-number_affected_crew <- predictions_figures %>%
-  filter(class ==1) %>%
-  group_by(mmsi_anonymous) %>%
-  summarize(mean_crew = mean(crew_size,na.rm=TRUE)) %>%
-  ungroup() %>%
-  .$mean_crew %>%
-  sum()
-```
-
-```{r}
-flag_predictions_other <- predictions_figures %>%
-  filter(class == 1) %>%
-  group_by(Country,gear) %>%
-  summarize(count_vessels = n_distinct(mmsi_anonymous)) %>%
-  ungroup() %>%
-  group_by(gear) %>%
-  mutate(fraction = count_vessels / sum(count_vessels)) %>%
-  mutate(Other = ifelse(fraction<0.025,TRUE,FALSE))
-
-vessels_fig_total <- predictions_figures_private  %>%
-  filter(class == 1) %>%
-  left_join(flag_predictions_other,by=c("Country","gear")) %>%
-  mutate(Country = ifelse(Other,"Other",Country))%>%
-  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
-                          gear=="squid_jigger" ~ "Squid jigger",
-                          TRUE ~ "Trawler")) %>%
-  group_by(Country,gear,year) %>%
-  summarize(`Number of vessels` = n()) %>%
-  ungroup() %>%
-  ggplot(aes(x = year, y = `Number of vessels`, fill = Country)) +
-  geom_bar(stat = "identity", color = "black",size=0.25) +
-  #coord_flip() +
-  labs(x="",title="(A) Number of high-risk vessels",y="") +
-  theme_bw() +
-  disco::scale_fill_disco(palette = "rainbow", "Flag") +
-  facet_grid(.~gear)+
-  scale_y_continuous(labels=scales::comma)+ 
-  scale_x_continuous(breaks = unique(predictions_figures$year)) +
-  theme(strip.background =element_rect(fill=NA),
-        axis.text.x = element_blank(),
-        panel.grid.minor = element_blank())
-
-vessels_fig_percentage <- predictions_figures_private %>%
-  group_by(year,gear) %>%
-  summarize(fraction_high_risk = sum(class) / n())%>%
-  ungroup() %>%
-  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
-                          gear=="squid_jigger" ~ "Squid jigger",
-                          TRUE ~ "Trawler")) %>%
-  ggplot(aes(x = year, y = fraction_high_risk)) +
-  geom_bar(stat="identity",color="black") +
-  facet_grid(.~gear) +
-  theme_bw()+
-  scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
-  scale_x_continuous(breaks = unique(predictions_figures$year),
-                   labels = unique(predictions_figures$year)) +
-  theme(strip.background =element_rect(fill=NA),
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        panel.grid.minor = element_blank())+
-  labs(x="",title="(B) Percentage of total vessels that are high-risk",y="")
-
-legend <- get_legend(
-  # create some space to the left of the legend
-  vessels_fig_total
-)
-
-vessels_fig <- cowplot::plot_grid(plot_grid(vessels_fig_total+ theme(legend.position="none"),
-                             vessels_fig_percentage,
-                             align = "v", 
-                             ncol = 1),
-                   legend,
-                   ncol=2,
-                   rel_widths = c(4,1))  
-vessels_fig
-ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,device="png",dpi=300)
-```
-
-
-
-
-```{r}
-training_df_figure <- filtered_main_df %>%
-  mutate(ais_type = ifelse(ais_type == "A",1,0))%>%
-  dplyr::select(-year,-source_id,-fldb_vessel_id,-flag)
-
-
-asinh_trans <- function(){
-  scales::trans_new(name = 'asinh', transform = function(x) asinh(x), 
-            inverse = function(x) sinh(x))
-}
-
-indicator_figure_data <- recipes::recipe(offender ~ ., data = head(training_df_figure)) %>%
-  recipes::update_role(mmsi, new_role = "id variable") %>%
-  recipes::update_role(gear, new_role = "id variable") %>%
-  # Box-Cox transformation on all numeric
-  recipes::step_BoxCox(all_numeric())%>%
-  step_normalize(all_predictors()) %>%
-  prep(training_df_figure) %>%
-  juice() %>%
-  pivot_longer(cols=c(-"mmsi",-"gear",-"offender"),names_to = "indicator") %>%
-  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
-                          gear=="squid_jigger" ~ "Squid jigger",
-                          TRUE ~ "Trawler")) %>%
-    left_join(feature_lookup,by="indicator") %>%
-  mutate(offender=ifelse(offender==1,"Positive","Unlabeled"))  %>%
-  mutate(indicator_type = case_when(indicator_type =="directly_observed" ~ "Directly\nobserved",
-                                    indicator_type =="gfw_fishing_model" ~ "GFW\nfishing\nalgorithm",
-                                    indicator_type =="registry_or_gfw_vessel_model" ~ "Vessel\nregistry\nor GFW\nvessel\nalgorithm"))
-
-indicator_figure <- indicator_figure_data %>%
-  ggplot(aes(x = reorder(indicator_name,desc(indicator_name)),y=value,color=factor(offender))) +
-  geom_boxplot(position=position_dodge(width=1),outlier.size = 0.1) +
-  disco::scale_color_disco(palette = "vibrant", "Training data label",direction=1,alpha=1,
-                           guide = guide_legend(reverse = TRUE) ) +
-  coord_flip() +
-  facet_grid_paginate(indicator_type~gear,drop=TRUE,space="free",scales="free_y") +
-  #facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
-  #facet_grid(indicator_type~gear,scales="free_y") +
-  scale_y_continuous(trans="asinh",breaks = scales::pretty_breaks(2)) +
-    labs(
-      x = "",
-      y = "Box-Cox transformed, centered, and scaled\n vales (inverse hyperbolic sine scale)"
-    ) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1,size=8),
-        legend.position = "bottom",
-        legend.direction = "horizontal",
-        strip.text.y.right = element_text(angle = 0),
-        strip.background =element_rect(fill=NA))
-
-indicator_figure
-
-ggsave(here::here("output_figures/figure_1.png"),indicator_figure,width=8,height=8,device="png",dpi=300)
-```
-
-```{r}
-training_dataset_fig <- training_df  %>%
-  # Only classify known offenders as positive in the year prior to being caught
-  mutate(offender = ifelse(offender==1,"Number of positive vessel-years","Number of unlabeled vessel-years")) %>%
-  mutate(Country = countrycode(flag,"iso3c","country.name")) %>%
-  group_by(gear,offender,year) %>% 
-  summarize(count=n()) %>% 
-  ungroup() %>%
-  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
-                          gear=="squid_jigger" ~ "Squid jigger",
-                          TRUE ~ "Trawler"))%>%
-  ggplot(aes(x=year,y=count,fill=gear)) + 
-  geom_bar(stat="identity",color="black",size=0.25) + 
-  #coord_flip() + 
-  facet_wrap(offender~.,scales="free_y",ncol=1)+
-  disco::scale_fill_disco(palette = "bright", "Gear") +
-  theme_bw() +
-  labs(x="",y="")+
-  scale_y_continuous(labels=scales::comma_format(accuracy=1))+ 
-  theme(strip.background =element_rect(fill=NA,
-                                       color = NA),
-        strip.text = element_text(hjust=0),
-        axis.title.y = element_text(angle=0,vjust=0.5))
-
-training_dataset_fig
-
-ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5,height=4.5,device="png",dpi=300)
-```
 
 \pagebreak
 
+# Use BigQuery
+
+```{r eval = params$use_big_query}
+# Bigquery project
+ucsb_project <- "ucsb-gfw"
+# Use GFW account, but only for this project
+gfw_project <- "world-fishing-827"
+options(scipen = 20)
+```
+
+
 ## High risk fishing effort maps - 2018
-```{r eval = FALSE}
+```{r eval = params$use_big_query}
 # Upload risk predictions
-# robustness_predictions_figures <- read.csv(here::here("interim_data/s10_robustness_predictions_figures.csv"),stringsAsFactors = FALSE) %>%
-#   mutate(year_assumption = as.character(year_assumption)) %>%
-#   mutate(Country = countrycode(flag,"iso3c","country.name"))
-# predictions_figures_mapping <- robustness_predictions_figures %>%
-#   filter(include_vessel_characteristics) %>%
-#   group_by(mmsi,year,gear,offender,fldb_vessel_id) %>%
-#   summarize(class = ifelse(sum(class)>=n()/2,1,0),
-#             probability = mean(.pred_1)) %>%
-#   ungroup()
-# 
-# predictions_figures_mapping <- robustness_predictions_figures %>%
-#   filter(include_vessel_characteristics & year_assumption==1) %>%
-#   dplyr::select(mmsi,year,gear,offender,fldb_vessel_id)
+# This uses the private version of the file that has actual data
 predictions_figures_private <- read.csv(here::here("interim_data/s4_final_model_predictions_private.csv"),stringsAsFactors = FALSE) %>%
   as_tibble() %>%
   dplyr::select(mmsi,year,gear,offender,fldb_vessel_id,prediction=.pred_1,class,crew_size,flag,Country)
-
-
 
 
 bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
@@ -853,55 +596,11 @@ write_csv(grouped_messages %>%
                   -fraction_known_offender_fishing_kW_hours) ,path=here::here("interim_data/s5_figure_3_data.csv"))
 ```
 
-```{r}
-grouped_messages <- read.csv(here::here("interim_data/s5_figure_3_data.csv"))
-
-world_land <- rworldmap::getMap(resolution = "low") %>%
-  st_as_sf()
-
-map_palette <- "inferno"
-map_palette_begin <- 0.2
-na_color <- viridis::viridis(n=5,option=map_palette,begin=map_palette_begin)[1]
-
-pal <- c(viridis::inferno(n = 8))[c(3,5:8)]
-pal <- c("midnightblue",viridis::inferno(n = 7)[c(3:7)])
-
-map_figure_rel <-   grouped_messages %>%
-  filter(!is.na(gear))%>%
-  mutate(gear = case_when(gear=="drifting_longlines" ~ "(A) Longliner",
-                          gear=="squid_jigger" ~ "(B) Squid jigger",
-                          TRUE ~ "(C) Trawler")) %>%
-  ggplot() +
-  geom_tile(aes(x = lon_bin, y = lat_bin, fill = fraction_at_risk_fishing_kW_hours,color=fraction_at_risk_fishing_kW_hours)) +
-  geom_sf(data = world_land, fill = "grey45", color = "grey45") +
-  scale_fill_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
-  theme_minimal() +
-  theme(panel.background = element_rect(fill="black"),
-        panel.grid.major = element_line(colour = "black"),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        text = element_text(size=15),
-        legend.direction = "vertical"
-  ) +
-  labs(
-    x = "",
-    y = "")+ 
-  ylim(c(-70, NA)) +
-  scale_color_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),guide=FALSE,labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
-  facet_wrap(.~gear,ncol=1)
-
-map_figure_rel
-ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)                                    
-```
-
 \pagebreak
 
 ## High risk port visit maps - 2018
 
-```{r eval = FALSE}
+```{r eval = params$use_big_query}
 ## Port mapping
 sql<-"#standardSQL
 WITH
@@ -1016,10 +715,385 @@ port_data <- bq_project_query(gfw_project, sql) %>%
 write_csv(port_data,path=here::here("interim_data/s6_figure_4_data.csv"))
 ```
 
+
+
+# Time at sea stat for paper - fraction of total time at sea by included vessels
+
 ```{r}
+sql<-"WITH
+included_vessels AS(
+SELECT
+year,mmsi,TRUE included
+FROM
+`ucsb-gfw.human_rights.risk_predictions`
+),
+base AS(
+SELECT
+  CAST(ssvid AS INT64) mmsi,year,
+  activity.active_hours active_hours
+FROM
+  `world-fishing-827.gfw_research.vi_ssvid_byyear_v20190430`
+  WHERE on_fishing_list_best),
+joined AS(
+ SELECT
+mmsi,
+year,
+active_hours,
+IF(included,TRUE,FALSE) included
+FROM
+base
+LEFT JOIN
+included_vessels
+USING(mmsi,year)),
+summary AS(
+SELECT
+SUM(active_hours) active_hours,
+included
+FROM joined
+GROUP BY
+included)
+SELECT
+(SELECT active_hours FROm summary WHERE included)/((SELECT active_hours FROm summary WHERE NOT included)+(SELECT active_hours FROm summary WHERE included)) fraction_active_hours_included"
+
+fraction_active_hours_included <- bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf)
+```
+
+\pagebreak
+
+# Figures
+
+```{r eval = (params$generate_figures | params$generate_stats)}
+# Read in cached bag performance
+bag_performance <- read_csv(here::here("interim_data/s7_figure_s3_data.csv"))
+
+# Here we choose the optimzed model
+# Non-bagging version has standard error too large
+# Stick with 5 bags to reduce variation
+# Stick with under_ratio of 1 for simplest model
+# Random forest has lowest standard deviation for modified f1, and has a higher recall
+optimized_model <- tibble(model_type = "random-forest",
+                          bagging = TRUE,
+                          under_ratio = 1,
+                          number_bags = 100)
+
+cv_performance <- bag_performance %>% 
+  mutate(bagging = ifelse(is.na(under_ratio),FALSE,TRUE)) %>%
+  inner_join(optimized_model,by = c("model_type", "number_bags", "under_ratio","bagging"))
+
+optimized_model$.threshold <- cv_performance$.threshold[1]
+
+# Read in cached final predictions
+predictions_figures <- read.csv(here::here("interim_data/s4_final_model_predictions.csv"),stringsAsFactors = FALSE) %>%
+  as_tibble() %>% 
+  mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
+  mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
+
+# Pull in forced labor vessel database
+fldb_data <-read_csv(here::here("raw_data/s3_suspected_forced_labor_database.csv"))
+
+# Pull in spatial forced labor risk data
+grouped_messages <- read.csv(here::here("interim_data/s5_figure_3_data.csv"))
+
+# Pull in port data
 port_data <- read_csv(here::here("interim_data/s6_figure_4_data.csv")) %>%
   filter(!is.na(port_iso3))
 
+# Read in cached cross-validation results from robustness checks
+robustness_cv <- read.csv(here::here("interim_data/s9_robustness_cv.csv"),stringsAsFactors = FALSE) %>%
+  mutate(year_assumption = as.character(year_assumption))
+
+# Read in cached final results from robustness checks
+robustness_predictions_figures <- read.csv(here::here("interim_data/s10_robustness_predictions_figures.csv"),stringsAsFactors = FALSE) %>%
+  mutate(year_assumption = as.character(year_assumption)) %>%
+  mutate(Country = countrycode(flag,"iso3c","country.name"))%>%
+  # Use optimal threshold found above
+  mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
+  mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
+```
+
+## Figure 1: Training data model feature summary
+
+```{r eval = params$generate_figures}
+training_df_figure <- filtered_main_df %>%
+  mutate(ais_type = ifelse(ais_type == "A",1,0))%>%
+  dplyr::select(-year,-source_id,-fldb_vessel_id,-flag)
+
+
+asinh_trans <- function(){
+  scales::trans_new(name = 'asinh', transform = function(x) asinh(x), 
+            inverse = function(x) sinh(x))
+}
+
+indicator_figure_data <- recipes::recipe(offender ~ ., data = head(training_df_figure)) %>%
+  recipes::update_role(mmsi, new_role = "id variable") %>%
+  recipes::update_role(gear, new_role = "id variable") %>%
+  # Box-Cox transformation on all numeric
+  recipes::step_BoxCox(all_numeric())%>%
+  step_normalize(all_predictors()) %>%
+  prep(training_df_figure) %>%
+  juice() %>%
+  pivot_longer(cols=c(-"mmsi",-"gear",-"offender"),names_to = "indicator") %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+    left_join(feature_lookup,by="indicator") %>%
+  mutate(offender=ifelse(offender==1,"Positive","Unlabeled"))  %>%
+  mutate(indicator_type = case_when(indicator_type =="directly_observed" ~ "Directly\nobserved",
+                                    indicator_type =="gfw_fishing_model" ~ "GFW\nfishing\nalgorithm",
+                                    indicator_type =="registry_or_gfw_vessel_model" ~ "Vessel\nregistry\nor GFW\nvessel\nalgorithm"))
+
+indicator_figure <- indicator_figure_data %>%
+  ggplot(aes(x = reorder(indicator_name,desc(indicator_name)),y=value,color=factor(offender))) +
+  geom_boxplot(position=position_dodge(width=1),outlier.size = 0.1) +
+  disco::scale_color_disco(palette = "vibrant", "Training data label",direction=1,alpha=1,
+                           guide = guide_legend(reverse = TRUE) ) +
+  coord_flip() +
+  facet_grid_paginate(indicator_type~gear,drop=TRUE,space="free",scales="free_y") +
+  #facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
+  #facet_grid(indicator_type~gear,scales="free_y") +
+  scale_y_continuous(trans="asinh",breaks = scales::pretty_breaks(2)) +
+    labs(
+      x = "",
+      y = "Box-Cox transformed, centered, and scaled\n vales (inverse hyperbolic sine scale)"
+    ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,size=8),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        strip.text.y.right = element_text(angle = 0),
+        strip.background =element_rect(fill=NA))
+
+indicator_figure
+
+ggsave(here::here("output_figures/figure_1.png"),indicator_figure,width=8,height=8,device="png",dpi=300)
+```
+
+\pagebreak
+
+## Figure 2 - Forced labor risk by fishing fleet
+
+### Figure 2 using point estimates
+
+```{r eval = (params$generate_figures | params$generate_stats)}
+flag_predictions_other <- predictions_figures %>%
+  filter(class == 1) %>%
+  group_by(Country,gear) %>%
+  summarize(count_vessels = n_distinct(mmsi_anonymous)) %>%
+  ungroup() %>%
+  group_by(gear) %>%
+  mutate(fraction = count_vessels / sum(count_vessels)) %>%
+  mutate(Other = ifelse(fraction<0.05,TRUE,FALSE))
+```
+
+```{r eval = params$generate_figures}
+vessels_fig_total <- predictions_figures  %>%
+  filter(class == 1) %>%
+  left_join(flag_predictions_other,by=c("Country","gear")) %>%
+  mutate(Country = ifelse(Other,"Other",Country))%>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  group_by(Country,gear,year) %>%
+  summarize(`Number of vessels` = n()) %>%
+  ungroup() %>%
+  ggplot(aes(x = year, y = `Number of vessels`, fill = Country)) +
+  geom_bar(stat = "identity", color = "black",size=0.25) +
+  #coord_flip() +
+  labs(x="",title="(A) Number of high-risk vessels",y="") +
+  theme_bw() +
+  disco::scale_fill_disco(palette = "rainbow", "Flag") +
+  facet_grid(.~gear)+
+  scale_y_continuous(labels=scales::comma)+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year)) +
+  theme(strip.background =element_rect(fill=NA),
+        axis.text.x = element_blank(),
+        panel.grid.minor = element_blank())
+
+vessels_fig_percentage <- predictions_figures %>%
+  group_by(year,gear) %>%
+  summarize(fraction_high_risk = sum(class) / n())%>%
+  ungroup() %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  ggplot(aes(x = year, y = fraction_high_risk)) +
+  geom_bar(stat="identity",color="black") +
+  facet_grid(.~gear) +
+  theme_bw()+
+  scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year),
+                   labels = unique(predictions_figures$year)) +
+  theme(strip.background =element_rect(fill=NA),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.minor = element_blank())+
+  labs(x="",title="(B) Percentage of total vessels that are high-risk",y="")
+
+legend <- get_legend(
+  # create some space to the left of the legend
+  vessels_fig_total
+)
+
+vessels_fig <- cowplot::plot_grid(plot_grid(vessels_fig_total+ theme(legend.position="none"),
+                             vessels_fig_percentage,
+                             align = "v", 
+                             ncol = 1),
+                   legend,
+                   ncol=2,
+                   rel_widths = c(4,1))  
+vessels_fig
+ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,device="png",dpi=300)
+```
+
+\pagebreak
+
+### Figure 2 using range estimates from robustness checks
+
+```{r eval = params$generate_figures}
+vessels_fig_data_summary_other <- robustness_predictions_figures %>%
+  filter(include_vessel_characteristics) %>%
+  filter(class == 1) %>%
+  group_by(Country,gear) %>%
+  summarize(count_vessels_years = n())%>%
+  group_by(gear) %>%
+  mutate(fraction = count_vessels_years / sum(count_vessels_years)) %>%
+  ungroup() %>%
+  mutate(Other = ifelse(fraction<0.05,TRUE,FALSE))  %>%
+  dplyr::select(Country,gear,Other)
+
+vessels_fig_data_summary_combined <- robustness_predictions_figures %>%
+  filter(include_vessel_characteristics) %>%
+  filter(class == 1) %>%
+  left_join(vessels_fig_data_summary_other,by=c("Country","gear")) %>%
+  mutate(Country = ifelse(Other,"Other",Country)) %>%
+  group_by(Country,gear,year,year_assumption,include_vessel_characteristics) %>%
+  summarize(count_vessels = n_distinct(mmsi_anonymous)) %>%
+  ungroup() %>%
+  group_by(Country,gear,year) %>%
+  summarize(count_vessels_average = mean(count_vessels,na.rm=TRUE),
+            count_vessels_min = min(count_vessels,na.rm=TRUE),
+            count_vessels_max = max(count_vessels,na.rm=TRUE)) %>%
+  ungroup() %>%
+  group_by(gear) %>%
+  complete(Country,year,fill = list(count_vessels_min=0,
+                                                  count_vessels_max=0,
+                                                  count_vessels_average=0)) %>%
+  ungroup()
+
+vessels_fig_total <- vessels_fig_data_summary_combined %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  ggplot(aes(year)) + 
+  geom_ribbon(aes(ymin=count_vessels_min, ymax=count_vessels_max,fill=Country,color=Country),alpha=0.5,size=0.25)+
+  geom_line(aes(y=count_vessels_average,color=Country)) +
+  labs(x="",title="(A) Number of high-risk vessels",y="") +
+  theme_bw() +
+  disco::scale_fill_disco(palette = "rainbow", "Flag") +
+  disco::scale_color_disco(palette = "rainbow", "Flag") +
+  facet_grid(.~gear)+
+  scale_y_continuous(labels=scales::comma)+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year)) +
+  theme(strip.background =element_rect(fill=NA),
+        axis.text.x = element_blank(),
+        panel.grid.minor = element_blank())
+
+
+vessels_fig_percentage <- robustness_predictions_figures %>%
+  group_by(gear,year,year_assumption,include_vessel_characteristics) %>%
+  summarize(fraction_high_risk = sum(class) / n())%>%
+  ungroup() %>%
+  group_by(year,gear) %>%
+  summarize(fraction_high_risk_average = mean(fraction_high_risk,na.rm=TRUE),
+            fraction_high_risk_min = min(fraction_high_risk,na.rm=TRUE),
+            fraction_high_risk_max = max(fraction_high_risk,na.rm=TRUE))%>%
+  ungroup() %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  ggplot(aes(year)) +
+  geom_ribbon(aes(ymin=fraction_high_risk_min, ymax=fraction_high_risk_max),alpha=0.5,size=0.25,color="black") +
+  geom_line(aes(y=fraction_high_risk_average)) +
+  facet_grid(.~gear) +
+  theme_bw()+
+  scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year),
+                     labels = unique(predictions_figures$year)) +
+  theme(strip.background =element_rect(fill=NA),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.minor = element_blank())+
+  labs(x="",title="(B) Percentage of total vessels that are high-risk",y="")
+
+legend <- get_legend(
+  # create some space to the left of the legend
+  vessels_fig_total
+)
+
+vessels_fig <- cowplot::plot_grid(plot_grid(vessels_fig_total+ theme(legend.position="none"),
+                                            vessels_fig_percentage,
+                                            align = "v", 
+                                            ncol = 1),
+                                  legend,
+                                  ncol=2,
+                                  rel_widths = c(4,1))  
+vessels_fig
+
+ggsave(here::here("output_figures/figure_2_robust.png"),vessels_fig,width=7.5,height=5,device="png",dpi=300)
+
+```
+
+
+\pagebreak
+
+## Figure 3 - Spatial forced labor risk
+
+```{r eval = params$generate_figures}
+world_land <- rworldmap::getMap(resolution = "low") %>%
+  st_as_sf()
+
+map_palette <- "inferno"
+map_palette_begin <- 0.2
+na_color <- viridis::viridis(n=5,option=map_palette,begin=map_palette_begin)[1]
+
+pal <- c(viridis::inferno(n = 8))[c(3,5:8)]
+pal <- c("midnightblue",viridis::inferno(n = 7)[c(3:7)])
+
+map_figure_rel <-   grouped_messages %>%
+  filter(!is.na(gear))%>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "(A) Longliner",
+                          gear=="squid_jigger" ~ "(B) Squid jigger",
+                          TRUE ~ "(C) Trawler")) %>%
+  ggplot() +
+  geom_tile(aes(x = lon_bin, y = lat_bin, fill = fraction_at_risk_fishing_kW_hours,color=fraction_at_risk_fishing_kW_hours)) +
+  geom_sf(data = world_land, fill = "grey45", color = "grey45") +
+  scale_fill_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill="black"),
+        panel.grid.major = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        text = element_text(size=15),
+        legend.direction = "vertical"
+  ) +
+  labs(
+    x = "",
+    y = "")+ 
+  ylim(c(-70, NA)) +
+  scale_color_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),guide=FALSE,labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  facet_wrap(.~gear,ncol=1)
+
+map_figure_rel
+ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)                                    
+```
+
+\pagebreak
+
+## Figure 4: Port visits by high-risk vessels
+
+```{r eval = params$generate_figures}
 # For each port country, summarize if there were known offender visits and predicted high-risk visits
 port_visit_summary <- port_data %>%
   group_by(port_iso3) %>%
@@ -1110,10 +1184,16 @@ port_map_figure_rel
 ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)      
 ```
 
-```{r}
+\pagebreak
+
+## Figure S1 - Positive vessel cases
+
+```{r eval = params$generate_figures}
 # Make figure summarizing ILO indicators
-# Pull in forced labor vessel database
-fldb_data <-read_csv(here::here("raw_data/s3_suspected_forced_labor_database.csv"))
+
+positive_vessels <- predictions_figures %>%
+  filter(offender == 1) %>%
+  dplyr::select(mmsi_anonymous,fldb_vessel_id,year,offender)
 
 # Summarize the number and fraction of forced labor vessels in operation during each number
 still_in_operation_stats <- predictions_figures %>%
@@ -1125,8 +1205,8 @@ still_in_operation_stats <- predictions_figures %>%
 operation_data <- predictions_figures %>%
   as_tibble() %>%
   filter(!is.na(fldb_vessel_id))%>% 
-  dplyr::select(fldb_vessel_id,name=year,offender,class,mmsi)%>%
-  mutate(mmsi=as.factor(mmsi))%>%
+  dplyr::select(fldb_vessel_id,name=year,offender,class,mmsi_anonymous)%>%
+  mutate(mmsi_anonymous=as.factor(mmsi_anonymous))%>%
   mutate(offender=as.factor(offender),
          class=as.factor(class),
          name = as.factor(name))%>%
@@ -1197,7 +1277,7 @@ ilo_indicator_fig <- combined_case_data %>%
   mutate(indicator_type = case_when(indicator_type=="case_info"~"(B) Case status information",
                                     indicator_type=="ilo_indicator" ~ "(A) ILO forced labor indicator",
                                     TRUE ~ "(C) Vessel operation status and model classification")) %>%
-  mutate(indicator_type = fct_relevel(indicator_type,"ILO forced labor indicator")) %>%
+  mutate(indicator_type = fct_relevel(indicator_type,"(A) ILO forced labor indicator")) %>%
   ggplot(aes(x=fldb_vessel_id,y=name,fill=interaction(class,indicator_type),color=interaction(offender,indicator_type))) +
   facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
   geom_count(shape = 21,stroke=1.1) +
@@ -1222,8 +1302,277 @@ ilo_indicator_fig
 ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=7.5,device="png",dpi=300)
 ```
 
-## Paper stats
-```{r}
+\pagebreak
+
+## Figure S3 - Cross-validation performance
+
+```{r eval = params$generate_figures}
+# Which bags to show in the figure
+bags_to_show <- c(1,10,50,100)
+cv_performance_fig <- bag_performance %>%
+  filter(!is.na(under_ratio) | number_bags ==1) %>%
+  mutate(number_bags = paste0("Bags: ",number_bags) %>%
+           fct_relevel(paste0("Bags: ",bags_to_show))) %>%
+mutate(under_ratio = ifelse(is.na(under_ratio),"B",under_ratio) %>%
+           fct_relevel("B")) %>%
+  mutate(model_type=ifelse(model_type=="random-forest","Random forest","Support vector\nmachine")) %>%
+  mutate(error_min = pmax(mean_performance-sd_performance,0),
+         error_max = ifelse(.metric=="recall",pmin(mean_performance+sd_performance,1),mean_performance+sd_performance)) %>%
+#  filter(.metric %in% c("recall","modified_f1")) %>% 
+    mutate(.metric = case_when(.metric=="recall"~"Recall",
+                               .metric=="modified_f1"~"Modified F1",
+                               TRUE~"Detection\nprevalence")) %>%
+  mutate(.metric = fct_relevel(.metric,"Recall","Detection\nprevalence")) %>%
+  ggplot(aes(x = factor(under_ratio),y=mean_performance,color=model_type)) + 
+  geom_point(position=position_dodge(width=0.75)) +
+  geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.75),width=0.5) + 
+  facet_grid(.metric~number_bags,scales="free_y",switch="y") +
+  labs(x = "Downsampling ratio",
+       y = "Mean\nacross\nfolds")+ 
+  theme_bw() +
+  theme(strip.background =element_rect(fill=NA),
+        axis.title.y = element_text(angle=0,vjust=0.5),
+        strip.text.y.left = element_text(angle=0,vjust=0.5)) +
+  disco::scale_color_disco("Model type")
+
+cv_performance_fig
+
+ggsave(here::here("output_figures/figure_s3.png"),cv_performance_fig,width=7.5,height=7.5,device="png",dpi=300)
+```
+
+\pagebreak
+
+## Figure S4: Classification by training label
+
+```{r  eval = params$generate_figures}
+n_fun <- function(x){
+  return(data.frame(y = max(x) + 0.05, label = paste0("n = ",prettyNum(length(x),big.mark=","))))
+}
+
+class_fig <- predictions_figures  %>%
+  ggplot(aes(x=Prediction,y=prediction,fill=Label)) + 
+  geom_boxplot(position = position_dodge(width = 0.75)) + 
+  coord_flip() + 
+  geom_hline(yintercept = optimized_model$.threshold,linetype=2) +
+  labs(y = "Model risk score",
+       x = "Model\nclassification")+
+    stat_summary(fun.data = n_fun, geom = "label",position = position_dodge(width = 0.75),show.legend = FALSE) +
+  ylim(c(0,1)) +
+  disco::scale_fill_disco(palette = "vibrant", "Training data\nlabel",direction=1,alpha=1,
+                           guide = guide_legend(reverse = TRUE) ) +
+  theme_bw() +
+  theme(axis.title.y = element_text(angle=0,vjust=0.5))
+
+class_fig
+
+ggsave(here::here("output_figures/figure_s4.png"),class_fig,width=7.5,height=3.5,device="png",dpi=300)
+```
+
+\pagebreak
+
+## Figure S5: Variable importance
+
+```{r eval = params$generate_figures}
+importance_fig <- read_csv(here::here("interim_data/s8_figure_s5_data.csv")) %>%
+  ggplot(aes(x = reorder(indicator_name,Importance), y = Importance)) +
+  geom_bar(stat = "identity",color="black") +
+  coord_flip() +
+  labs(x = "",
+       y = "Mean importance across bags") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+
+importance_fig
+
+ggsave(here::here("output_figures/figure_s5.png"),importance_fig,width=7.5,height=5,device="png",dpi=300)
+```
+
+\pagebreak
+
+## Figure S7 - Cross-validation results from robustness checks
+
+```{r eval = params$generate_figures}
+robustness_cv_fig <- robustness_cv %>%
+  mutate(error_min = pmax(mean_performance-sd_performance,0),
+         error_max = ifelse(.metric=="recall",
+                            pmin(mean_performance+sd_performance,1),
+                            mean_performance+sd_performance))%>%
+  mutate(.metric = case_when(.metric=="recall"~"Recall",
+                             .metric=="modified_f1"~"Modified F1",
+                             TRUE~"Detection\nprevalence")) %>%
+  mutate(include_vessel_characteristics = ifelse(include_vessel_characteristics,"Yes","No") %>%
+           fct_relevel("Yes")) %>%
+  ggplot(aes(x = year_assumption,y=mean_performance,color=include_vessel_characteristics)) +
+  geom_point(position=position_dodge(width=0.75)) +
+  geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.75),width=0.5) + 
+  facet_grid(.metric~.,scales="free_y",switch="y") +
+  labs(x = "Positive training data set label year assumption",
+       y = "Mean\nacross\nfolds")+ 
+  theme_bw() +
+  theme(strip.background =element_rect(fill=NA),
+        axis.title.y = element_text(angle=0,vjust=0.5),
+        strip.text.y.left = element_text(angle=0,vjust=0.5)) +
+  disco::scale_color_disco("Include\nvessel\ncharacteristics",palette="muted") +
+  ylim(c(0,NA))
+
+robustness_cv_fig
+
+ggsave(here::here("output_figures/figure_s7.png"),robustness_cv_fig,width=7.5,height=5,device="png",dpi=300)
+
+```
+
+\pagebreak
+
+## Figure S8 - Final model results from robustness checks
+
+```{r eval = (params$generate_figures | params$generate_stats)}
+robustness_final <- robustness_predictions_figures %>%
+  group_by(year_assumption,include_vessel_characteristics) %>%
+  nest() %>%
+  mutate(results = map(data,function(x){
+    
+    tmp_pred <- x
+    
+    n_predicted_positive_vessel_years <- tmp_pred %>%
+      filter(Prediction == "Positive") %>%
+      nrow()
+    
+    n_predicted_positive_vessel_years_new <- tmp_pred %>%
+      filter(Prediction == "Positive" & Label == "Unlabeled") %>%
+      nrow()
+    
+    fraction_positive_vessel_years <- n_predicted_positive_vessel_years / nrow(tmp_pred)
+    
+    
+    n_predicted_positive_vessels <- tmp_pred %>%
+      filter(Prediction == "Positive") %>%
+      distinct(mmsi_anonymous) %>%
+      nrow()
+    
+    fraction_positive_vessels <- n_predicted_positive_vessels / length(unique(tmp_pred$mmsi_anonymous))
+    
+    n_positive_crew <- tmp_pred %>%
+      filter(Prediction == "Positive") %>%
+      distinct(mmsi_anonymous,crew_size) %>%
+      .$crew_size %>%
+      sum()
+    
+    correct_positives <- tmp_pred %>%
+      filter(Prediction == "Positive" & Label == "Positive") %>%
+      nrow()
+    
+    fraction_correct_positives <- correct_positives / (tmp_pred %>%
+                                                         filter( Label == "Positive") %>%
+                                                         nrow())
+    
+    riskiest_gears <- tmp_pred %>%
+      group_by(gear,class) %>%
+      summarize(count = n()) %>%
+      ungroup() %>%
+      pivot_wider(names_from = "class",values_from="count") %>%
+      mutate(fraction_risky = `1` / (`1` + `0`)) %>%
+      rename(low_risk = `0`,
+             high_risk = `1`)
+    
+    riskiest_fleets <-tmp_pred  %>%
+      filter(class == 1) %>%
+      group_by(mmsi_anonymous,Country,gear,year) %>%
+      summarize(crew_size = mean(crew_size)) %>%
+      ungroup() %>%
+      group_by(Country,gear) %>%
+      summarize(`Number of vessels` = n(),
+                `Number of crew` = sum(crew_size)) %>%
+      ungroup() %>%
+      gather("indicator","count",-gear,-Country) %>%
+      mutate(indicator = fct_relevel(indicator,c("Number of vessels","Number of crew"))) %>%
+      filter(indicator == "Number of vessels") %>%
+      arrange(desc(count)) %>%
+      slice(1:5)
+
+    return(tibble(n_predicted_positive_vessel_years = n_predicted_positive_vessel_years,
+                  n_predicted_positive_vessels = n_predicted_positive_vessels,
+                  n_predicted_positive_vessel_years_new = n_predicted_positive_vessel_years_new,
+                  fraction_positive_vessels = fraction_positive_vessels,
+                  fraction_positive_vessel_years = fraction_positive_vessel_years,
+                  n_positive_crew = n_positive_crew,
+                  fraction_correct_positives = fraction_correct_positives,
+                  riskiest_gears = list(riskiest_gears),
+                  riskiest_fleets = list(riskiest_fleets)))
+  })) %>%
+  ungroup() %>%
+  dplyr::select(-data)
+
+robustness_gears <- robustness_final %>%
+  unnest(results) %>%
+  dplyr::select(year_assumption,include_vessel_characteristics,riskiest_gears) %>%
+  unnest(riskiest_gears)
+
+robustness_fleets <- robustness_final %>%
+  unnest(results) %>%
+  dplyr::select(year_assumption,include_vessel_characteristics,riskiest_fleets) %>%
+  unnest(riskiest_fleets)
+
+robustness_final <- robustness_final  %>%
+  unnest(results) %>%
+  dplyr::select(-riskiest_gears,-riskiest_fleets)
+```
+
+```{r eval = params$generate_figures}
+robustness_final_fig <- robustness_final%>%
+  dplyr::select(-n_predicted_positive_vessel_years_new) %>%
+  rename(`Fraction of correctly\nidentified true positives` = fraction_correct_positives,
+         `Fraction of vessels\nidentified as positives` = fraction_positive_vessels,
+         `Fraction of vessel-years\nidentified as positives` = fraction_positive_vessel_years,
+         `Number of vessels\nidentified as positives` = n_predicted_positive_vessels,
+         `Number of vessel-years\nidentified as positives` = n_predicted_positive_vessel_years,
+         `Number of crew\nworking on\npositive vessels` = n_positive_crew) %>%
+  pivot_longer(-c(year_assumption,include_vessel_characteristics)) %>%
+  mutate(include_vessel_characteristics = ifelse(include_vessel_characteristics,"Yes","No") %>%
+           fct_relevel("Yes")) %>%
+  ggplot(aes(x = year_assumption,y=value,fill=include_vessel_characteristics)) +
+  geom_bar(stat = "identity",position=position_dodge(width=1),color="black") +
+  facet_grid(name~.,scales="free_y",switch="y") +
+  labs(x = "Positive training data set label year assumption",
+       y = "")+ 
+  theme_bw() +
+  theme(strip.background =element_rect(fill=NA),
+        axis.title.y = element_text(angle=0,vjust=0.5),
+        strip.text.y.left = element_text(angle=0,vjust=0.5)) +
+  disco::scale_fill_disco("Include\nvessel\ncharacteristics",palette="muted") +
+  scale_y_continuous(labels=scales::comma,limits = c(0,NA))
+
+robustness_final_fig
+
+ggsave(here::here("output_figures/figure_s8.png"),robustness_final_fig,width=7.5,height=7.5,device="png",dpi=300)
+
+```
+
+\pagebreak
+
+# Statistics
+
+## Using base model assumptions
+
+```{r eval = params$generate_stats}
+# What is the number of unique high-risk vessels (vessels that were high-risk during at least 1 year)?
+number_high_risk_vessels <- predictions_figures %>%
+    filter(class ==1) %>%
+    .$mmsi_anonymous %>% unique() %>% length()
+
+# What is the fraction of unique vessels that were high-risk during at least 1 year?
+fraction_high_risk_vessels <- number_high_risk_vessels /
+  (predictions_figures %>%
+    .$mmsi_anonymous %>% unique() %>% length())
+
+# What is the number of potentially affected crew that were on high-risk vessels?
+number_affected_crew <- predictions_figures %>%
+  filter(class ==1) %>%
+  group_by(mmsi_anonymous) %>%
+  summarize(mean_crew = mean(crew_size,na.rm=TRUE)) %>%
+  ungroup() %>%
+  .$mean_crew %>%
+  sum()
+
 n_predicted_positive_vessel_years <- predictions_figures %>%
   filter(Prediction == "Positive") %>%
   nrow()
@@ -1233,20 +1582,6 @@ n_predicted_positive_vessel_years_new <- predictions_figures %>%
   nrow()
 
 fraction_positive_vessel_years <- n_predicted_positive_vessel_years / nrow(predictions_figures)
-
-
-n_predicted_positive_vessels <- predictions_figures %>%
-  filter(Prediction == "Positive") %>%
-  distinct(mmsi) %>%
-  nrow()
-
-fraction_positive_vessels <- n_predicted_positive_vessels / length(unique(predictions_figures$mmsi))
-
-n_positive_crew <- predictions_figures %>%
-  filter(Prediction == "Positive") %>%
-  distinct(mmsi,crew_size) %>%
-  .$crew_size %>%
-  sum()
 
 correct_positives <- predictions_figures %>%
   filter(Prediction == "Positive" & Label == "Positive") %>%
@@ -1261,14 +1596,14 @@ riskiest_gears <- predictions_figures %>%
   summarize(count = n()) %>%
   ungroup() %>%
   pivot_wider(names_from = "class",values_from="count") %>%
-  mutate(fraction_risky = `1` / (`1` + `0`))
+  mutate(fraction_risky = `1` / (`1` + `0`),
+         percentage_risky = round(fraction_risky * 100))
 
 riskiest_fleets <-predictions_figures  %>%
-  filter(fishing_hours > 0) %>%
   filter(class == 1) %>%
   left_join(flag_predictions_other,by=c("Country","gear")) %>%
   mutate(Country = ifelse(Other,"Other",Country))%>%
-  group_by(mmsi,Country,gear,year) %>%
+  group_by(mmsi_anonymous,Country,gear,year) %>%
   summarize(crew_size = mean(crew_size)) %>%
   ungroup() %>%
   group_by(Country,gear) %>%
@@ -1279,48 +1614,73 @@ riskiest_fleets <-predictions_figures  %>%
   mutate(indicator = fct_relevel(indicator,c("Number of vessels","Number of crew"))) %>%
   filter(indicator == "Number of vessels") %>%
   arrange(desc(count)) %>%
-  slice(1:5)
-
+  slice(1:5) %>%
+  mutate(gear = case_when(gear == "squid_jigger" ~ "squid jiggers",
+                                    gear == "drifting_longlines" ~ "longliners",
+                                    gear == "trawlers" ~ "trawlers")) %>% 
+  mutate(statement = paste(Country, gear)) %>% 
+  .$statement %>% 
+  paste(collapse = ", ")
 ```
 
-# Time at sea stat for paper - fraction of total time at sea by included vessels
+The model correctly identifies `r round(fraction_correct_positives * 100)`% of positive vessel-years as being high-risk, while also identifying `r prettyNum(n_predicted_positive_vessel_years,big.mark=",")` total high-risk vessel-years (`r round(fraction_positive_vessel_years * 100)`% of the total vessel-years). 
 
-```{r eval = FALSE}
-sql<-"WITH
-included_vessels AS(
-SELECT
-year,mmsi,TRUE included
-FROM
-`ucsb-gfw.human_rights.risk_predictions`
-),
-base AS(
-SELECT
-  CAST(ssvid AS INT64) mmsi,year,
-  activity.active_hours active_hours
-FROM
-  `world-fishing-827.gfw_research.vi_ssvid_byyear_v20190430`
-  WHERE on_fishing_list_best),
-joined AS(
- SELECT
-mmsi,
-year,
-active_hours,
-IF(included,TRUE,FALSE) included
-FROM
-base
-LEFT JOIN
-included_vessels
-USING(mmsi,year)),
-summary AS(
-SELECT
-SUM(active_hours) active_hours,
-included
-FROM joined
-GROUP BY
-included)
-SELECT
-(SELECT active_hours FROm summary WHERE included)/((SELECT active_hours FROm summary WHERE NOT included)+(SELECT active_hours FROm summary WHERE included)) fraction_active_hours_included"
+`r prettyNum(number_high_risk_vessels,big.mark=",")` unique vessels were high-risk during at least one year (`r round(fraction_high_risk_vessels * 100)`% of the total unique vessels).
 
-fraction_active_hours_included <- bq_project_query(gfw_project, sql) %>%
-  bq_table_download(max_results = Inf)
+`r prettyNum(round(number_affected_crew),big.mark=",")` crew members were working on these boats and thus potential victims of forced labor during at least one year. 
+
+`r riskiest_fleets` represent the five fisheries with the largest number of unique high-risk vessels.
+
+While longliners have the largest number of high-risk vessel-years across years, squid jiggers have the highest percentage of high-risk vessels across all years (`r riskiest_gears %>% filter(gear=="squid_jigger") %>% .$percentage_risky`%), followed by longliners (`r riskiest_gears %>% filter(gear=="drifting_longlines") %>% .$percentage_risky`%) and trawlers (`r riskiest_gears %>% filter(gear=="trawlers") %>% .$percentage_risky`%). 
+
+## Using range of results from robustness checks
+
+```{r eval = params$generate_stats}
+robustness_summary <- robustness_final %>%
+  filter(include_vessel_characteristics) %>%
+  pivot_longer(-c(year_assumption,include_vessel_characteristics)) %>%
+  group_by(name) %>%
+  summarize(min = min(value,na.rm=TRUE),
+            max = max(value,na.rm=TRUE)) %>%
+  ungroup() %>%
+  mutate(range = ifelse(!str_detect(name,"fraction"),
+                        paste0(prettyNum(round(min),big.mark=","),
+                               " and ",
+                               prettyNum(round(max),big.mark=",")),
+                        paste0(round(min*100),
+                               "% and ",
+                               round(max*100),"%")))
+
+robustness_gears_summary <- robustness_gears %>%
+  filter(include_vessel_characteristics)%>%
+  group_by(gear) %>%
+  summarize(min = min(fraction_risky,na.rm=TRUE),
+            max = max(fraction_risky,na.rm=TRUE)) %>%
+  ungroup() %>%
+  mutate(range = paste0(round(min*100),
+                               "% and ",
+                               round(max*100),"%"))
+
+robustness_fleets_summary <- robustness_fleets%>%
+  filter(include_vessel_characteristics) %>%
+  group_by(Country,gear) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  arrange(desc(count))%>%
+  mutate(gear = case_when(gear == "squid_jigger" ~ "squid jiggers",
+                                    gear == "drifting_longlines" ~ "longliners",
+                                    gear == "trawlers" ~ "trawlers")) %>% 
+  mutate(statement = paste(Country, gear)) %>% 
+  .$statement %>% 
+  paste(collapse = ", ")
 ```
+
+The model correctly identifies between `r robustness_summary %>% filter(name=="fraction_correct_positives") %>% .$range` of positive vessel-years as being high-risk, while also identifying between `r n_predicted_positive_vessel_years` total high-risk vessel-years (between `r robustness_summary %>% filter(name=="fraction_positive_vessel_years") %>% .$range` of the total vessel-years). 
+
+Between `r robustness_summary %>% filter(name=="n_predicted_positive_vessels") %>% .$range` unique vessels were high-risk during at least one year (between `r robustness_summary %>% filter(name=="fraction_positive_vessels") %>% .$range` of the total unique vessels).
+
+Between `r robustness_summary %>% filter(name=="n_positive_crew") %>% .$range` crew members were working on these boats and thus potential victims of forced labor during at least one year. 
+
+Looking across all model assumptions, `r robustness_fleets_summary` represent the five fisheries with the largest number of unique high-risk vessels.
+
+While longliners have the largest number of high-risk vessel-years across years, squid jiggers have the highest percentage of high-risk vessels across all years (between `r robustness_gears_summary %>% filter(gear=="squid_jigger") %>% .$range`), followed by longliners (between `r robustness_gears_summary %>% filter(gear=="drifting_longlines") %>% .$range`) and trawlers (between `r robustness_gears_summary %>% filter(gear=="trawlers") %>% .$range`). 

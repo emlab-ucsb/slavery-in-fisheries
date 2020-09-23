@@ -323,7 +323,42 @@ robustness_predictions_figures <- robustness_results_df %>%
   dplyr::select(-cv_performance) %>%
   unnest(predictions_figures)
 
-write_csv(robustness_predictions_figures,here::here("interim_data/s10_robustness_predictions_figures.csv"))
+write_csv(robustness_predictions_figures %>%
+            dplyr::select(year_assumption,
+                          include_vessel_characteristics,
+                          mmsi,
+                          year,
+                          crew_size,
+                          offender,
+                          .pred_1,
+                          flag,
+                          gear,
+                          class,
+                          fldb_vessel_id),here::here("interim_data/s10_robustness_predictions_figures_private.csv"))
+
+write_csv(robustness_predictions_figures %>%
+            mutate(mmsi_anonymous = anonymize(mmsi),.seed=101)%>%
+            dplyr::select(mmsi_anonymous,
+                          year_assumption,
+                          include_vessel_characteristics,
+                          year,
+                          crew_size,
+                          offender,
+                          flag,
+                          gear,
+                          class,
+                          fldb_vessel_id),here::here("interim_data/s10_robustness_predictions_figures.csv"))
+
+robustness_predictions_figures_private <- read.csv(here::here("interim_data/s10_robustness_predictions_figures_private.csv"),stringsAsFactors = FALSE) %>%
+  mutate(year_assumption = as.character(year_assumption)) %>%
+  mutate(Country = countrycode(flag,"iso3c","country.name"))
+
+robustness_predictions_figures <- read.csv(here::here("interim_data/s10_robustness_predictions_figures.csv"),stringsAsFactors = FALSE) %>%
+  mutate(year_assumption = as.character(year_assumption)) %>%
+  mutate(Country = countrycode(flag,"iso3c","country.name"))%>%
+  # Use optimal threshold found above
+  mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
+  mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
 
 robustness_final <- robustness_predictions_figures %>%
   group_by(year_assumption,include_vessel_characteristics) %>%
@@ -345,14 +380,14 @@ robustness_final <- robustness_predictions_figures %>%
     
     n_predicted_positive_vessels <- tmp_pred %>%
       filter(Prediction == "Positive") %>%
-      distinct(mmsi) %>%
+      distinct(mmsi_anonymous) %>%
       nrow()
     
-    fraction_positive_vessels <- n_predicted_positive_vessels / length(unique(tmp_pred$mmsi))
+    fraction_positive_vessels <- n_predicted_positive_vessels / length(unique(tmp_pred$mmsi_anonymous))
     
     n_positive_crew <- tmp_pred %>%
       filter(Prediction == "Positive") %>%
-      distinct(mmsi,crew_size) %>%
+      distinct(mmsi_anonymous,crew_size) %>%
       .$crew_size %>%
       sum()
     
@@ -364,26 +399,73 @@ robustness_final <- robustness_predictions_figures %>%
                                                          filter( Label == "Positive") %>%
                                                          nrow())
     
+    riskiest_gears <- tmp_pred %>%
+      group_by(gear,class) %>%
+      summarize(count = n()) %>%
+      ungroup() %>%
+      pivot_wider(names_from = "class",values_from="count") %>%
+      mutate(fraction_risky = `1` / (`1` + `0`)) %>%
+      rename(low_risk = `0`,
+             high_risk = `1`)
+    
+    riskiest_fleets <-tmp_pred  %>%
+      filter(class == 1) %>%
+      group_by(mmsi_anonymous,Country,gear,year) %>%
+      summarize(crew_size = mean(crew_size)) %>%
+      ungroup() %>%
+      group_by(Country,gear) %>%
+      summarize(`Number of vessels` = n(),
+                `Number of crew` = sum(crew_size)) %>%
+      ungroup() %>%
+      gather("indicator","count",-gear,-Country) %>%
+      mutate(indicator = fct_relevel(indicator,c("Number of vessels","Number of crew"))) %>%
+      filter(indicator == "Number of vessels") %>%
+      arrange(desc(count)) %>%
+      slice(1:5)
+
     return(tibble(n_predicted_positive_vessel_years = n_predicted_positive_vessel_years,
                   n_predicted_positive_vessels = n_predicted_positive_vessels,
+                  n_predicted_positive_vessel_years_new = n_predicted_positive_vessel_years_new,
                   fraction_positive_vessels = fraction_positive_vessels,
                   fraction_positive_vessel_years = fraction_positive_vessel_years,
                   n_positive_crew = n_positive_crew,
-                  fraction_correct_positives = fraction_correct_positives))
+                  fraction_correct_positives = fraction_correct_positives,
+                  riskiest_gears = list(riskiest_gears),
+                  riskiest_fleets = list(riskiest_fleets)))
   })) %>%
-  dplyr::select(-data) %>%
-  unnest(results) 
+  dplyr::select(-data)
+
+robustness_gears <- robustness_final %>%
+  unnest(results) %>%
+  dplyr::select(year_assumption,include_vessel_characteristics,riskiest_gears) %>%
+  unnest(riskiest_gears)
+
+robustness_fleets <- robustness_final %>%
+  unnest(results) %>%
+  dplyr::select(year_assumption,include_vessel_characteristics,riskiest_fleets) %>%
+  unnest(riskiest_fleets)
+
+robustness_final <- robustness_final  %>%
+  unnest(results) %>%
+  dplyr::select(-riskiest_gears,-riskiest_fleets)
 
 write_csv(robustness_final,here::here("interim_data/s11_robustness_final.csv"))
+
+write_csv(robustness_gears,here::here("interim_data/s12_robustness_gears.csv"))
+
+write_csv(robustness_fleets,here::here("interim_data/s13_robustness_fleets.csv"))
 
 
 robustness_cv <- read.csv(here::here("interim_data/s9_robustness_cv.csv"),stringsAsFactors = FALSE) %>%
   mutate(year_assumption = as.character(year_assumption))
 
-robustness_predictions_figures <- read.csv(here::here("interim_data/s10_robustness_predictions_figures.csv"),stringsAsFactors = FALSE) %>%
+robustness_final <- read.csv(here::here("interim_data/s11_robustness_final.csv"),stringsAsFactors = FALSE) %>%
   mutate(year_assumption = as.character(year_assumption))
 
-robustness_final <- read.csv(here::here("interim_data/s11_robustness_final.csv"),stringsAsFactors = FALSE) %>%
+robustness_gears <- read.csv(here::here("interim_data/s12_robustness_gears.csv"),stringsAsFactors = FALSE) %>%
+  mutate(year_assumption = as.character(year_assumption))
+
+robustness_fleets <- read.csv(here::here("interim_data/s13_robustness_fleets.csv"),stringsAsFactors = FALSE) %>%
   mutate(year_assumption = as.character(year_assumption))
 
 
@@ -396,6 +478,8 @@ robustness_cv_fig <- robustness_cv %>%
   mutate(.metric = case_when(.metric=="recall"~"Recall",
                              .metric=="modified_f1"~"Modified F1",
                              TRUE~"Detection\nprevalence")) %>%
+  mutate(include_vessel_characteristics = ifelse(include_vessel_characteristics,"Yes","No") %>%
+           fct_relevel("Yes")) %>%
   ggplot(aes(x = year_assumption,y=mean_performance,color=include_vessel_characteristics)) +
   geom_point(position=position_dodge(width=0.75)) +
   geom_errorbar(aes(ymin=error_min, ymax=error_max),position=position_dodge(width=0.75),width=0.5) + 
@@ -411,10 +495,11 @@ robustness_cv_fig <- robustness_cv %>%
 
 robustness_cv_fig
 
-#ggsave(here::here("output_figures/figure_s6.png"),robustness_cv_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s7.png"),robustness_cv_fig,width=7.5,height=5,device="png",dpi=300)
 
 
 robustness_final_fig <- robustness_final%>%
+  dplyr::select(-n_predicted_positive_vessel_years_new) %>%
   rename(`Fraction of correctly\nidentified true positives` = fraction_correct_positives,
          `Fraction of vessels\nidentified as positives` = fraction_positive_vessels,
          `Fraction of vessel-years\nidentified as positives` = fraction_positive_vessel_years,
@@ -422,6 +507,8 @@ robustness_final_fig <- robustness_final%>%
          `Number of vessel-years\nidentified as positives` = n_predicted_positive_vessel_years,
          `Number of crew\nworking on\npositive vessels` = n_positive_crew) %>%
   pivot_longer(-c(year_assumption,include_vessel_characteristics)) %>%
+  mutate(include_vessel_characteristics = ifelse(include_vessel_characteristics,"Yes","No") %>%
+           fct_relevel("Yes")) %>%
   ggplot(aes(x = year_assumption,y=value,fill=include_vessel_characteristics)) +
   geom_bar(stat = "identity",position=position_dodge(width=1),color="black") +
   facet_grid(name~.,scales="free_y",switch="y") +
@@ -436,4 +523,236 @@ robustness_final_fig <- robustness_final%>%
 
 robustness_final_fig
 
-#ggsave(here::here("output_figures/figure_s7.png"),robustness_final_fig,width=7.5,height=7.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s8.png"),robustness_final_fig,width=7.5,height=7.5,device="png",dpi=300)
+
+# Min and max ranges for paper
+# Only include ranges that use vessel characteristics
+robustness_final %>%
+  filter(include_vessel_characteristics) %>%
+  pivot_longer(-c(year_assumption,include_vessel_characteristics)) %>%
+  group_by(name) %>%
+  summarize(min = min(value,na.rm=TRUE),
+            max = max(value,na.rm=TRUE)) %>%
+  ungroup()
+
+robustness_cv %>%
+  filter(include_vessel_characteristics)%>%
+  group_by(.metric) %>%
+  summarize(min = min(mean_performance,na.rm=TRUE),
+            max = max(mean_performance,na.rm=TRUE)) %>%
+  ungroup()
+
+robustness_gears%>%
+  filter(include_vessel_characteristics)%>%
+  group_by(gear) %>%
+  summarize(min = min(fraction_risky,na.rm=TRUE),
+            max = max(fraction_risky,na.rm=TRUE)) %>%
+  ungroup()
+
+robustness_fleets%>%
+  as_tibble() %>%
+  filter(include_vessel_characteristics) %>%
+  group_by(Country,gear) %>%
+  summarize(count = sum(count)) %>%
+  ungroup() %>%
+  arrange(desc(count))
+
+
+# Plot how many vessels have known vessel characteristics, by year
+sql<-"
+WITH
+  risk_predictions AS(
+  SELECT
+    *
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions` ),
+  known_info AS(
+  SELECT
+    CAST(ssvid AS INT64) mmsi,
+    year,
+  IF
+    (registry_info.best_known_length_m IS NULL,
+      0,
+      1) known_length_m,
+  IF
+    (registry_info.best_known_tonnage_gt IS NULL,
+      0,
+      1)known_tonnage_gt,
+  IF
+    (registry_info.best_known_engine_power_kw IS NULL,
+      0,
+      1) known_engine_power_kw,
+  IF
+    (best.best_crew_size = inferred.avg_inferred_crew_size_byyear
+      AND NOT best.best_crew_size IS NULL,
+      1,
+      0) known_crew_size
+  FROM
+    `world-fishing-827.gfw_research.vi_ssvid_byyear_v20200801`),
+  joined AS(
+  SELECT
+    *
+  FROM
+    known_info
+  JOIN
+    risk_predictions
+  USING
+    (mmsi,
+      year))
+SELECT
+  year,
+  COUNT(*) number_vessels,
+  SUM(known_length_m) number_vessels_known_length,
+  SUM(known_tonnage_gt) number_vessels_known_tonnage_gt,
+  SUM(known_engine_power_kw) number_vessels_known_engine_power_kw,
+  SUM(known_crew_size) number_vessels_known_crew_size,
+  SUM(known_length_m)/COUNT(*) fraction_vessels_known_length,
+  SUM(known_tonnage_gt)/COUNT(*) fraction_number_vessels_known_tonnage_gt,
+  SUM(known_engine_power_kw)/COUNT(*) fraction_number_vessels_known_engine_power_kw,
+  SUM(known_crew_size)/COUNT(*) fraction_number_vessels_known_crew_size
+FROM
+  joined
+GROUP BY
+  year
+ORDER BY
+  year"
+
+known_vessel_info <- bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf)
+
+write_csv(known_vessel_info,here::here("interim_data/s13_known_vessel_info.csv"))
+
+known_vessel_info <- read_csv(here::here("interim_data/s13_known_vessel_info.csv"))
+
+known_vessel_info_fig <- known_vessel_info %>%
+  mutate(year = as.character(year)) %>%
+  pivot_longer(-year) %>%
+  filter(name %in% c("fraction_vessels_known_length",
+                     "fraction_number_vessels_known_crew_size",
+                     "fraction_number_vessels_known_tonnage_gt",
+                     "fraction_number_vessels_known_engine_power_kw")) %>%
+  mutate(name = case_when(name=="fraction_vessels_known_length"~"Percentage of vessels with registry length",
+                          name=="fraction_number_vessels_known_crew_size"~"Percentage of vessels with registry crew size",
+                          name=="fraction_number_vessels_known_tonnage_gt"~"Percentage of vessels with registry tonnage",
+                          name=="fraction_number_vessels_known_engine_power_kw"~"Percentage of vessels with registry engine power")) %>%
+  ggplot(aes(x=year,y=value)) +
+  geom_bar(stat="identity",color="black") +
+  facet_wrap(name~.,ncol=1,scales="free_y") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  labs(x="",
+       y="") +
+  theme(strip.background = element_blank())
+
+known_vessel_info_fig
+
+ggsave(here::here("output_figures/figure_s6.png"),known_vessel_info_fig,width=7.5,height=5,device="png",dpi=300)
+
+vessels_fig_data_summary <- robustness_predictions_figures %>%
+  filter(include_vessel_characteristics) %>%
+  filter(class == 1) %>%
+  group_by(Country,gear,year,year_assumption,include_vessel_characteristics) %>%
+  summarize(count_vessels = n_distinct(mmsi_anonymous)) %>%
+  ungroup() %>%
+  group_by(Country,gear,year) %>%
+  summarize(count_vessels_average = mean(count_vessels,na.rm=TRUE),
+            count_vessels_min = min(count_vessels,na.rm=TRUE),
+            count_vessels_max = max(count_vessels,na.rm=TRUE)) %>%
+  ungroup()
+
+vessels_fig_data_summary_other <- robustness_predictions_figures %>%
+  filter(include_vessel_characteristics) %>%
+  filter(class == 1) %>%
+  group_by(Country,gear) %>%
+  summarize(count_vessels_years = n())%>%
+  group_by(gear) %>%
+  mutate(fraction = count_vessels_years / sum(count_vessels_years)) %>%
+  ungroup() %>%
+  mutate(Other = ifelse(fraction<0.05,TRUE,FALSE))  %>%
+  dplyr::select(Country,gear,Other)
+
+vessels_fig_data_summary_combined <- robustness_predictions_figures %>%
+  filter(include_vessel_characteristics) %>%
+  filter(class == 1) %>%
+  left_join(vessels_fig_data_summary_other,by=c("Country","gear")) %>%
+  mutate(Country = ifelse(Other,"Other",Country)) %>%
+  group_by(Country,gear,year,year_assumption,include_vessel_characteristics) %>%
+  summarize(count_vessels = n_distinct(mmsi_anonymous)) %>%
+  ungroup() %>%
+  group_by(Country,gear,year) %>%
+  summarize(count_vessels_average = mean(count_vessels,na.rm=TRUE),
+            count_vessels_min = min(count_vessels,na.rm=TRUE),
+            count_vessels_max = max(count_vessels,na.rm=TRUE)) %>%
+  ungroup() %>%
+  group_by(gear) %>%
+  complete(Country,year,fill = list(count_vessels_min=0,
+                                                  count_vessels_max=0,
+                                                  count_vessels_average=0)) %>%
+  ungroup()
+
+vessels_fig_total <- vessels_fig_data_summary_combined %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  ggplot(aes(year)) + 
+  geom_ribbon(aes(ymin=count_vessels_min, ymax=count_vessels_max,fill=Country,color=Country),alpha=0.5,size=0.25)+
+  geom_line(aes(y=count_vessels_average,color=Country)) +
+  labs(x="",title="(A) Number of high-risk vessels",y="") +
+  theme_bw() +
+  disco::scale_fill_disco(palette = "rainbow", "Flag") +
+  disco::scale_color_disco(palette = "rainbow", "Flag") +
+  facet_grid(.~gear)+
+  scale_y_continuous(labels=scales::comma)+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year)) +
+  theme(strip.background =element_rect(fill=NA),
+        axis.text.x = element_blank(),
+        panel.grid.minor = element_blank())
+vessels_fig_total
+
+vessels_fig_percentage <- robustness_predictions_figures %>%
+  group_by(gear,year,year_assumption,include_vessel_characteristics) %>%
+  summarize(fraction_high_risk = sum(class) / n())%>%
+  ungroup() %>%
+  group_by(year,gear) %>%
+  summarize(fraction_high_risk_average = mean(fraction_high_risk,na.rm=TRUE),
+            fraction_high_risk_min = min(fraction_high_risk,na.rm=TRUE),
+            fraction_high_risk_max = max(fraction_high_risk,na.rm=TRUE))%>%
+  ungroup() %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler")) %>%
+  ggplot(aes(year)) +
+  geom_ribbon(aes(ymin=fraction_high_risk_min, ymax=fraction_high_risk_max),alpha=0.5,size=0.25,color="black") +
+  geom_line(aes(y=fraction_high_risk_average)) +
+  facet_grid(.~gear) +
+  theme_bw()+
+  scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
+  scale_x_continuous(breaks = unique(predictions_figures$year),
+                     labels = unique(predictions_figures$year)) +
+  theme(strip.background =element_rect(fill=NA),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.minor = element_blank())+
+  labs(x="",title="(B) Percentage of total vessels that are high-risk",y="")
+vessels_fig_percentage
+legend <- get_legend(
+  # create some space to the left of the legend
+  vessels_fig_total
+)
+
+vessels_fig <- cowplot::plot_grid(plot_grid(vessels_fig_total+ theme(legend.position="none"),
+                                            vessels_fig_percentage,
+                                            align = "v", 
+                                            ncol = 1),
+                                  legend,
+                                  ncol=2,
+                                  rel_widths = c(4,1))  
+vessels_fig
+
+ggsave(here::here("output_figures/figure_2_robust.png"),vessels_fig,width=7.5,height=5,device="png",dpi=300)
+
+# Summarize which MMSI are high-risk across all model specifications
+predictions_figures_mapping <- robustness_predictions_figures %>%
+  filter(include_vessel_characteristics) %>%
+  group_by(mmsi_anonymous,year,offender,fldb_vessel_id) %>%
+  summarize(class = ifelse(sum(class)==n(),1,0)) %>%
+  ungroup()
