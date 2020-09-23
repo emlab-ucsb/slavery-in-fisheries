@@ -28,6 +28,7 @@ library(sf)
 library(here)
 library(rworldmap)
 library(ggforce)
+library(anonymizer)
 library(cowplot)
 # Load custom threshold_perf function, adapted from probably::threshold_perf to give different metrics
 source(here::here("r/threshold_perf_custom.R"))
@@ -413,10 +414,13 @@ predictions_figures <- predictions_final %>%
   mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
   mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
 
-# Save final predictions
+# Save final predictions with MMSI
+# This will late be uploaded to BQ, and MMSI will be used to match vessel with fishing activity and port visits
+write_csv(predictions_figures,here::here("interim_data/s4_final_model_predictions_private.csv"))
+# Save final predictions without MMSI, for public release
 write_csv(predictions_figures %>%
+            mutate(mmsi_anonymous = anonymize(mmsi),.seed=101) %>%
             dplyr::select(-mmsi),here::here("interim_data/s4_final_model_predictions.csv"))
-
 
 
 # Get average variable importance across bags
@@ -503,36 +507,34 @@ ggsave(here::here("output_figures/figure_s4.png"),class_fig,width=7.5,height=3.5
 # What is the number of unique high-risk vessels (vessels that were high-risk during at least 1 year)?
 number_high_risk_vessels <- predictions_figures %>%
     filter(class ==1) %>%
-    .$mmsi %>% unique() %>% length()
+    .$mmsi_anonymous %>% unique() %>% length()
 
 # What is the fraction of unique vessels that were high-risk during at least 1 year?
 fraction_high_risk_vessels <- number_high_risk_vessels /
   (predictions_figures %>%
-    .$mmsi %>% unique() %>% length())
+    .$mmsi_anonymous %>% unique() %>% length())
 
 # What is the number of potentially affected crew that were on high-risk vessels?
 number_affected_crew <- predictions_figures %>%
   filter(class ==1) %>%
-  group_by(mmsi) %>%
+  group_by(mmsi_anonymous) %>%
   summarize(mean_crew = mean(crew_size,na.rm=TRUE)) %>%
   ungroup() %>%
   .$mean_crew %>%
   sum()
+```
 
+```{r}
 flag_predictions_other <- predictions_figures %>%
-  filter(fishing_hours > 0) %>%
-  #filter(year == 2018) %>%
   filter(class == 1) %>%
   group_by(Country,gear) %>%
-  summarize(count_vessels = n_distinct(mmsi)) %>%
+  summarize(count_vessels = n_distinct(mmsi_anonymous)) %>%
   ungroup() %>%
   group_by(gear) %>%
   mutate(fraction = count_vessels / sum(count_vessels)) %>%
   mutate(Other = ifelse(fraction<0.025,TRUE,FALSE))
 
-vessels_fig_total <- predictions_figures  %>%
-  filter(fishing_hours > 0) %>%
-  #filter(year == 2018) %>%
+vessels_fig_total <- predictions_figures_private  %>%
   filter(class == 1) %>%
   left_join(flag_predictions_other,by=c("Country","gear")) %>%
   mutate(Country = ifelse(Other,"Other",Country))%>%
@@ -555,7 +557,7 @@ vessels_fig_total <- predictions_figures  %>%
         axis.text.x = element_blank(),
         panel.grid.minor = element_blank())
 
-vessels_fig_percentage <- predictions_figures %>%
+vessels_fig_percentage <- predictions_figures_private %>%
   group_by(year,gear) %>%
   summarize(fraction_high_risk = sum(class) / n())%>%
   ungroup() %>%
@@ -682,34 +684,62 @@ ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5
 ## High risk fishing effort maps - 2018
 ```{r eval = FALSE}
 # Upload risk predictions
+# robustness_predictions_figures <- read.csv(here::here("interim_data/s10_robustness_predictions_figures.csv"),stringsAsFactors = FALSE) %>%
+#   mutate(year_assumption = as.character(year_assumption)) %>%
+#   mutate(Country = countrycode(flag,"iso3c","country.name"))
+# predictions_figures_mapping <- robustness_predictions_figures %>%
+#   filter(include_vessel_characteristics) %>%
+#   group_by(mmsi,year,gear,offender,fldb_vessel_id) %>%
+#   summarize(class = ifelse(sum(class)>=n()/2,1,0),
+#             probability = mean(.pred_1)) %>%
+#   ungroup()
+# 
+# predictions_figures_mapping <- robustness_predictions_figures %>%
+#   filter(include_vessel_characteristics & year_assumption==1) %>%
+#   dplyr::select(mmsi,year,gear,offender,fldb_vessel_id)
+predictions_figures_private <- read.csv(here::here("interim_data/s4_final_model_predictions_private.csv"),stringsAsFactors = FALSE) %>%
+  as_tibble() %>%
+  dplyr::select(mmsi,year,gear,offender,fldb_vessel_id,prediction=.pred_1,class,crew_size,flag,Country)
+
+
+
+
 bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
-  bq_table_upload(values = predictions_figures %>% dplyr::select(mmsi,year,offender,probability=.pred_1,class,gear,fldb_vessel_id),
-                  fields = as_bq_fields(predictions_figures),
+  bq_table_upload(values = predictions_figures_private,
+                  fields = as_bq_fields(predictions_figures_private),
                   write_disposition = "WRITE_TRUNCATE")
+
+sql<-"SELECT
+  mmsi,
+  EXTRACT(YEAR
+  FROM
+    timestamp) year,
+  FLOOR(lat / 0.25) * 0.25 + 0.125 lat_bin,
+  FLOOR(lon / 0.25) * 0.25 + 0.125 lon_bin,
+  SUM((CASE
+        WHEN nnet_score2 = 1 AND NOT (distance_from_shore_m < 1000 AND speed < 1) THEN hours
+      ELSE
+      0
+    END
+      )) fishing_hours
+FROM
+  `ucsb-gfw.human_rights.all_vessel_positions`
+GROUP BY
+  mmsi,
+  lat_bin,
+  lon_bin,
+  year"
+
+# Only run this once since it's so expensive
+#bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "binned_fishing_base",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
 
 sql <- "#standardSQL
 WITH
   fishing_info AS(
   SELECT
-    mmsi,
-    EXTRACT(YEAR
-    FROM
-      timestamp) year,
-    FLOOR(lat / 0.25) * 0.25 + 0.125 lat_bin,
-    FLOOR(lon / 0.25) * 0.25 + 0.125 lon_bin,
-    SUM((CASE
-          WHEN nnet_score2 = 1 AND NOT (distance_from_shore_m < 1000 AND speed < 1) THEN hours
-        ELSE
-        0
-      END
-        )) fishing_hours
+    *
   FROM
-    `ucsb-gfw.human_rights.all_vessel_positions`
-  GROUP BY
-    mmsi,
-    lat_bin,
-    lon_bin,
-    year),
+    `ucsb-gfw.human_rights.binned_fishing_base`),
   extra_offsetting_filter AS(
   SELECT
     CAST(ssvid AS INT64) mmsi,
