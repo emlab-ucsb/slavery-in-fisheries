@@ -10,7 +10,7 @@ editor_options:
 params:
      run_analysis: FALSE
      run_robustness: FALSE
-     generate_figures: FALSE
+     generate_figures: TRUE
      generate_stats: TRUE
      use_big_query: FALSE
 ---
@@ -759,6 +759,74 @@ fraction_active_hours_included <- bq_project_query(gfw_project, sql) %>%
   bq_table_download(max_results = Inf)
 ```
 
+```{r}
+# Plot how many vessels have known vessel characteristics, by year
+sql<-"
+WITH
+  risk_predictions AS(
+  SELECT
+    *
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions` ),
+  known_info AS(
+  SELECT
+    CAST(ssvid AS INT64) mmsi,
+    year,
+  IF
+    (registry_info.best_known_length_m IS NULL,
+      0,
+      1) known_length_m,
+  IF
+    (registry_info.best_known_tonnage_gt IS NULL,
+      0,
+      1)known_tonnage_gt,
+  IF
+    (registry_info.best_known_engine_power_kw IS NULL,
+      0,
+      1) known_engine_power_kw,
+  IF
+    (best.best_crew_size = inferred.avg_inferred_crew_size_byyear
+      AND NOT best.best_crew_size IS NULL,
+      1,
+      0) known_crew_size
+  FROM
+    `world-fishing-827.gfw_research.vi_ssvid_byyear_v20200801`),
+  joined AS(
+  SELECT
+    *
+  FROM
+    known_info
+  JOIN
+    risk_predictions
+  USING
+    (mmsi,
+      year))
+SELECT
+  year,
+  COUNT(*) number_vessels,
+  SUM(known_length_m) number_vessels_known_length,
+  SUM(known_tonnage_gt) number_vessels_known_tonnage_gt,
+  SUM(known_engine_power_kw) number_vessels_known_engine_power_kw,
+  SUM(known_crew_size) number_vessels_known_crew_size,
+  SUM(known_length_m)/COUNT(*) fraction_vessels_known_length,
+  SUM(known_tonnage_gt)/COUNT(*) fraction_number_vessels_known_tonnage_gt,
+  SUM(known_engine_power_kw)/COUNT(*) fraction_number_vessels_known_engine_power_kw,
+  SUM(known_crew_size)/COUNT(*) fraction_number_vessels_known_crew_size
+FROM
+  joined
+GROUP BY
+  year
+ORDER BY
+  year"
+
+known_vessel_info <- bq_project_query(gfw_project, sql) %>%
+  bq_table_download(max_results = Inf)
+
+write_csv(known_vessel_info,here::here("interim_data/s13_known_vessel_info.csv"))
+
+```
+
+
 \pagebreak
 
 # Figures
@@ -810,6 +878,9 @@ robustness_predictions_figures <- read.csv(here::here("interim_data/s10_robustne
   # Use optimal threshold found above
   mutate(Prediction = ifelse(class == 1,"Positive","Negative")) %>%
   mutate(Label = ifelse(offender == 0,"Unlabeled","Positive"))
+
+# Pull in summary of known vessel registry info
+known_vessel_info <- read_csv(here::here("interim_data/s13_known_vessel_info.csv"))
 ```
 
 ## Figure 1: Training data model feature summary
@@ -1386,6 +1457,38 @@ importance_fig
 
 ggsave(here::here("output_figures/figure_s5.png"),importance_fig,width=7.5,height=5,device="png",dpi=300)
 ```
+
+\pagebreak
+
+# Figure S6 - Summary of known vessel registry information
+
+```{r eval = params$generate_figures}
+known_vessel_info_fig <- known_vessel_info %>%
+  mutate(year = as.character(year)) %>%
+  pivot_longer(-year) %>%
+  filter(name %in% c("fraction_vessels_known_length",
+                     "fraction_number_vessels_known_crew_size",
+                     "fraction_number_vessels_known_tonnage_gt",
+                     "fraction_number_vessels_known_engine_power_kw")) %>%
+  mutate(name = case_when(name=="fraction_vessels_known_length"~"Percentage of vessels with registry length",
+                          name=="fraction_number_vessels_known_crew_size"~"Percentage of vessels with registry crew size",
+                          name=="fraction_number_vessels_known_tonnage_gt"~"Percentage of vessels with registry tonnage",
+                          name=="fraction_number_vessels_known_engine_power_kw"~"Percentage of vessels with registry engine power")) %>%
+  ggplot(aes(x=year,y=value)) +
+  geom_bar(stat="identity",color="black") +
+  facet_wrap(name~.,ncol=1,scales="free_y") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  labs(x="",
+       y="") +
+  theme(strip.background = element_blank())
+
+known_vessel_info_fig
+
+ggsave(here::here("output_figures/figure_s6.png"),known_vessel_info_fig,width=7.5,height=5,device="png",dpi=300)
+
+```
+
 
 \pagebreak
 
