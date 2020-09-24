@@ -10,7 +10,7 @@ editor_options:
 params:
      run_analysis: FALSE
      run_robustness: FALSE
-     generate_figures: FALSE
+     generate_figures: TRUE
      use_big_query: FALSE
 ---
 
@@ -1988,6 +1988,8 @@ ggsave(here::here("output_figures/figure_s8.png"),robustness_final_fig,width=7.5
 
 # Statistics
 
+We select our optimized model variation to be random forest with 100 bags and a downsampling ratio of 1. This specification has the following mean performance across the 10 folds: modified F1 score: `r cv_performance %>% filter(.metric=="modified_f1") %>% .$mean_performance %>% signif(2)`; recall: `r cv_performance %>% filter(.metric=="recall") %>% .$mean_performance %>% signif(2)`; and detection prevalence: `r cv_performance %>% filter(.metric=="detection_prevalence") %>% .$mean_performance %>% signif(2)`.
+
 ## Using base model assumptions
 
 ```{r eval = TRUE}
@@ -2099,6 +2101,8 @@ number_psma_countries_at_risk <- psma_countries_at_risk%>%
 
 ```
 
+
+The model identifies `r prettyNum(n_predicted_positive_vessel_years_new,big.mark=",")` new high-risk vessel-years that were previously unlabeled.
 
 The model correctly identifies `r round(fraction_correct_positives * 100)`% of positive vessel-years as being high-risk, while also identifying `r prettyNum(n_predicted_positive_vessel_years,big.mark=",")` total high-risk vessel-years (`r round(fraction_positive_vessel_years * 100)`% of the total vessel-years). 
 
