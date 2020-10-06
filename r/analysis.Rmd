@@ -1440,6 +1440,9 @@ vessels_fig_total <- vessels_fig_data_summary_combined %>%
         panel.grid.minor = element_blank())
 
 
+
+write_csv(vessels_fig_data_summary_combined,here::here("interim_data/s12_figure_2_data.csv"))
+
 vessels_fig_percentage <- robustness_predictions_figures %>%
   group_by(gear,year,year_assumption,include_vessel_characteristics) %>%
   summarize(fraction_high_risk = sum(class) / n())%>%
