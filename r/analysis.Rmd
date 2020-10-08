@@ -79,14 +79,8 @@ positive_vessels <- main_df %>%
 filtered_main_df <- main_df %>%
   # Only only include vessel-years from positives in the year prior to being caught
   # Otherwise exclude them from training - they have high potential for being positive
-  dplyr::select(-fldb_vessel_id,-offender) %>%
-  left_join(positive_vessels,by=c("mmsi","year")) %>%
-  filter(!(mmsi %in% positive_vessels$mmsi & !offender)) %>%
-  dplyr::select(-years_until_caught) %>%
-  # Make binaries into 1s/0s
-  mutate(offender = ifelse(is.na(offender),0,1),
-         foc = ifelse(foc,1,0),
-         iuu = ifelse(iuu,1,0))
+  filter((offender == 1 & years_until_caught == 1) | offender == 0)  %>%
+  dplyr::select(-years_until_caught)
 
 training_df <- filtered_main_df %>%
   # Add media source id
@@ -105,9 +99,6 @@ training_df <- filtered_main_df %>%
      list(as.factor)) 
 
 prediction_df <- main_df %>%
-  dplyr::select(-fldb_vessel_id,-offender) %>%
-  # Attach positive fldb_vessel_id to MMSIs, so we can see how these change over time
-  left_join(positive_vessels %>% dplyr::select(-year),by=c("mmsi")) %>%
   mutate(offender = case_when(offender == 1 & years_until_caught == 1 ~ 1,
                               is.na(offender) ~ 0,
                               TRUE ~ 0)) %>%
@@ -452,8 +443,8 @@ write_csv(importance_data,here::here("interim_data/s8_figure_s5_data.csv"))
 # Robustness checks
 
 ```{r eval = params$run_robustness}
-robustness_results_df <- tibble(year_assumption = sort(unique(main_df$years_until_caught))) %>% 
-  crossing(tibble(include_vessel_characteristics = c(TRUE,FALSE))) %>%
+robustness_results_df <- tibble(year_assumption = sort(unique(main_df$years_until_caught)[1])) %>% 
+  crossing(tibble(include_vessel_characteristics = c(TRUE,FALSE)[1])) %>%
   mutate(robustness_results = map2(year_assumption,
                                    include_vessel_characteristics,
          function(year_assumption,include_vessel_characteristics){
@@ -465,45 +456,37 @@ robustness_results_df <- tibble(year_assumption = sort(unique(main_df$years_unti
     dplyr::select(mmsi,fldb_vessel_id,year,offender)
   
   filtered_main_df <- main_df %>%
-    # Only only include vessel-years from positives in the year prior to being caught
-    # Otherwise exclude them from training - they have high potential for being positive
-    dplyr::select(-fldb_vessel_id,-offender) %>%
-    left_join(positive_vessels,by=c("mmsi","year")) %>%
-    filter(!(mmsi %in% positive_vessels$mmsi & !offender)) %>%
-    dplyr::select(-years_until_caught) %>%
-    # Make binaries into 1s/0s
-    mutate(offender = ifelse(is.na(offender),0,1),
-           foc = ifelse(foc,1,0),
-           iuu = ifelse(iuu,1,0))
-  
-  training_df <- filtered_main_df %>%
-    # Add media source id
-    # If it's not a known offender, create dummy ID for CV
-    mutate(source_id = ifelse(offender != 1,
-                              paste0("no_source_",row_number()),
-                              source_id)) %>%
-    # Add forced labor database vessel id
-    # If it's not a known offender, create dummy ID for CV
-    mutate(fldb_vessel_id = ifelse(offender != 1,
-                                   paste0("no_fldb_info_",row_number()),
-                                   fldb_vessel_id)) %>%
-    # Make these columns factors
-    mutate_at(
-      vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
-      list(as.factor))
-  
-  prediction_df <- main_df %>%
-    dplyr::select(-fldb_vessel_id,-offender) %>%
-    # Attach positive fldb_vessel_id to MMSIs, so we can see how these change over time
-    left_join(positive_vessels %>% dplyr::select(-year),by=c("mmsi")) %>%
-    mutate(offender = case_when(offender == 1 & years_until_caught == 1 ~ 1,
-                                is.na(offender) ~ 0,
-                                TRUE ~ 0)) %>%
-    dplyr::select(-years_until_caught) %>%
-    # Make these columns factors
-    mutate_at(
-      vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
-      list(as.factor))
+  # Only only include vessel-years from positives in the year prior to being caught
+  # Otherwise exclude them from training - they have high potential for being positive
+  #dplyr::select(-fldb_vessel_id,-offender) %>%
+  filter((offender == 1 & years_until_caught == 1) | offender == 0)  %>%
+  dplyr::select(-years_until_caught)
+
+training_df <- filtered_main_df %>%
+  # Add media source id
+  # If it's not a known offender, create dummy ID for CV
+  mutate(source_id = ifelse(offender != 1,
+                            paste0("no_source_",row_number()),
+                            source_id)) %>%
+  # Add forced labor database vessel id
+  # If it's not a known offender, create dummy ID for CV
+  mutate(fldb_vessel_id = ifelse(offender != 1,
+                            paste0("no_fldb_info_",row_number()),
+                            fldb_vessel_id)) %>%
+  # Make these columns factors
+  mutate_at(
+     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
+     list(as.factor)) 
+
+prediction_df <- main_df %>%
+  mutate(offender = case_when(offender == 1 & years_until_caught == 1 ~ 1,
+                              is.na(offender) ~ 0,
+                              TRUE ~ 0)) %>%
+  dplyr::select(-years_until_caught) %>%
+  # Make these columns factors
+  mutate_at(
+     vars("foc", "iuu", "gear", "flag", "year", "ais_type", "mmsi", "fldb_vessel_id", "year", "source_id", "offender"),
+     list(as.factor))
   
   fl_rec <- recipes::recipe(offender ~ ., data = head(training_df)) %>%
     recipes::update_role(mmsi, new_role = "id variable") %>%
@@ -548,7 +531,7 @@ robustness_results_df <- tibble(year_assumption = sort(unique(main_df$years_unti
   # NA means no downsampling, so just the regular base classifier
   under_ratio_vec <- tibble(under_ratio = 1)
   # Number of bags
-  bag_vec <- tibble(bag = seq(100))
+  bag_vec <- tibble(bag = seq(5))
   # Different models to try
   model_type_vec <- tibble(model_type = c("random_forest"))
   
@@ -1598,23 +1581,18 @@ ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,
 
 ```{r eval = params$generate_figures}
 # Make figure summarizing ILO indicators
-
-positive_vessels <- predictions_figures %>%
-  filter(offender == 1) %>%
-  dplyr::select(mmsi_anonymous,fldb_vessel_id,year,offender)
-
 # Summarize the number and fraction of forced labor vessels in operation during each number
 still_in_operation_stats <- predictions_figures %>%
   filter(!is.na(fldb_vessel_id)) %>%
   group_by(year) %>%
   summarize(count_in_operation = n(),
-            fraction_in_operation = n()/nrow(positive_vessels))
+            fraction_in_operation = n()/length(unique(predictions_figures %>% filter(!is.na(fldb_vessel_id)) %>% .$fldb_vessel_id)),
+            count_high_risk = sum(class),
+            fraction_high_risk = sum(class)/count_in_operation)
 
 operation_data <- predictions_figures %>%
-  as_tibble() %>%
-  filter(!is.na(fldb_vessel_id))%>% 
-  dplyr::select(fldb_vessel_id,name=year,offender,class,mmsi_anonymous)%>%
-  mutate(mmsi_anonymous=as.factor(mmsi_anonymous))%>%
+  filter(!is.na(fldb_vessel_id)) %>%
+  dplyr::select(fldb_vessel_id,name=year,offender,class)%>%
   mutate(offender=as.factor(offender),
          class=as.factor(class),
          name = as.factor(name))%>%
@@ -1634,7 +1612,7 @@ ilo_data <- fldb_data %>%
          class=as.factor(1))
 
 case_data <- fldb_data %>%
-  dplyr::select(fldb_vessel_id,eyewitness_account,official_investigation,non_official_investigations,arrests_made,charges_filed,conviction_made,penalties_sanctioned) %>%
+  distinct(fldb_vessel_id,eyewitness_account,official_investigation,non_official_investigations,arrests_made,charges_filed,conviction_made,penalties_sanctioned) %>%
   rename(`Penalties sanctioned` = penalties_sanctioned,
          `Eyewitness account` = eyewitness_account,
          `Official investigation` = official_investigation,
@@ -1688,7 +1666,7 @@ ilo_indicator_fig <- combined_case_data %>%
   mutate(indicator_type = fct_relevel(indicator_type,"(A) ILO forced labor indicator")) %>%
   ggplot(aes(x=fldb_vessel_id,y=name,fill=interaction(class,indicator_type),color=interaction(offender,indicator_type))) +
   facet_col("indicator_type",scales="free_y",drop=TRUE,space="free") +
-  geom_count(shape = 21,stroke=1.1) +
+  geom_point(shape = 21,stroke=1.5,size=4) +
   theme_bw() +
   theme(axis.text.x = element_blank(),
         legend.position = "bottom",
@@ -1758,7 +1736,7 @@ n_fun <- function(x){
 }
 
 class_fig <- predictions_figures  %>%
-  ggplot(aes(x=Prediction,y=prediction,fill=Label)) + 
+  ggplot(aes(x=Prediction,y=.pred_1,fill=Label)) + 
   geom_boxplot(position = position_dodge(width = 0.75)) + 
   coord_flip() + 
   geom_hline(yintercept = optimized_model$.threshold,linetype=2) +
@@ -2122,6 +2100,8 @@ We also find that known positive vessels visited ports in `r port_countries_know
 In 2018 alone, model-identified high-risk vessels visited ports across `r n_countries_at_risk` developed and developing countries in 2018 (`r round(fraction_countries_high_risk_port_visits*100)`% of all visited countries for these gear types), including `r number_psma_countries_at_risk` Parties to the Port State Measures Agreement (Figure 4). The visited ports are predominantly in Asia, Africa, and South America, with notable exceptions being Canada, United States, New Zealand, and several European countries. 
 
 `r port_countries_high_risk_no_known_offenders` of the countries visited by high-risk vessels in 2018 had not been visited by known positive vessels, which is reflective of our limited training data set but may also be reflective of the limited port oversight currently occurring in many countries. 
+
+In 2018, `r still_in_operation_stats %>% filter(year==2018) %>% .$count_in_operation` of `r predictions_figures %>% filter(!is.na(fldb_vessel_id)) %>% .$fldb_vessel_id %>% unique() %>% length()` (`r round((still_in_operation_stats %>% filter(year==2018) %>% .$fraction_in_operation)*100)`%) vessels with reported forced labor were still operating, with `r still_in_operation_stats %>% filter(year==2018) %>% .$count_high_risk` of those `r still_in_operation_stats %>% filter(year==2018) %>% .$count_in_operation` vessels (`r round((still_in_operation_stats %>% filter(year==2018) %>% .$fraction_high_risk)*100)`%) being classified as high-risk. 
 
 ```{r eval = TRUE, results='asis'}
 countries_at_risk %>% 
