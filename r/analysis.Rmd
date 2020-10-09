@@ -70,15 +70,9 @@ main_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
          foc = ifelse(foc,1,0),
          iuu = ifelse(iuu,1,0)) 
 
-# Select only possible vessel years
-# Only classify known offenders as positive in the year prior to being caught
-positive_vessels <- main_df %>%
-  filter(offender == 1 & years_until_caught == 1) %>%
-  dplyr::select(mmsi,fldb_vessel_id,year,offender)
-
 filtered_main_df <- main_df %>%
   # Only only include vessel-years from positives in the year prior to being caught
-  # Otherwise exclude them from training - they have high potential for being positive
+  # Otherwise exclude them from training - they have potential for being positive, but we are not sure
   filter((offender == 1 & years_until_caught == 1) | offender == 0)  %>%
   dplyr::select(-years_until_caught)
 
@@ -451,15 +445,12 @@ robustness_results_df <- tibble(year_assumption = sort(unique(main_df$years_unti
 
 
   if(is.na(year_assumption)) return()
-  positive_vessels <- main_df %>%
-    filter(offender == 1 & years_until_caught <= year_assumption) %>%
-    dplyr::select(mmsi,fldb_vessel_id,year,offender)
   
   filtered_main_df <- main_df %>%
   # Only only include vessel-years from positives in the year prior to being caught
   # Otherwise exclude them from training - they have high potential for being positive
   #dplyr::select(-fldb_vessel_id,-offender) %>%
-  filter((offender == 1 & years_until_caught == 1) | offender == 0)  %>%
+  filter((offender == 1 & years_until_caught <= year_assumption) | offender == 0)  %>%
   dplyr::select(-years_until_caught)
 
 training_df <- filtered_main_df %>%
@@ -479,7 +470,7 @@ training_df <- filtered_main_df %>%
      list(as.factor)) 
 
 prediction_df <- main_df %>%
-  mutate(offender = case_when(offender == 1 & years_until_caught == 1 ~ 1,
+  mutate(offender = case_when(offender == 1 & years_until_caught <= year_assumption ~ 1,
                               is.na(offender) ~ 0,
                               TRUE ~ 0)) %>%
   dplyr::select(-years_until_caught) %>%
