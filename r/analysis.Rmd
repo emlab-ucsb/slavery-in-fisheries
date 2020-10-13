@@ -508,7 +508,7 @@ prediction_df <- main_df %>%
 
   rf_mod <- rand_forest(
     mode = "classification",
-    trees = 100
+    trees = 1000
   ) %>%
     set_engine("ranger")
   
@@ -2035,6 +2035,9 @@ number_psma_countries_at_risk <- psma_countries_at_risk%>%
 
 ```
 
+Our PU approach leverages information from all positively labeled vessels (n = `r training_df %>% group_by(offender) %>% summarize(count = n_distinct(mmsi)) %>% filter(offender==1) %>% .$count` unique vessels across `r training_df %>% group_by(offender) %>% summarize(count = n()) %>% filter(offender==1) %>% .$count %>% prettyNum(big.mark=',')` vessel-years, using our base model assumption), but places less emphasis on unlabeled vessels given their uncertain nature (n = `r training_df %>% group_by(offender) %>% summarize(count = n_distinct(mmsi)) %>% filter(offender==0) %>% .$count` unique vessels across `r training_df %>% group_by(offender) %>% summarize(count = n()) %>% filter(offender==0) %>% .$count %>% prettyNum(big.mark=',')` vessel-years, using our base model assumption).
+
+We train the predictive model using vessel monitoring data from Global Fishing Watch . For `r prettyNum(prediction_df %>% summarize(count = n_distinct(mmsi)) %>% .$count, big.mark=',')` unique longliner, trawler, and squid jiggers vessel vessels, we calculate a number of features on an annual basis from 2012 - 2018 (SI Table S1). We call the unit of observation a “vessel-year”. These features represent aggregate annual observable vessel behavior features. We also include vessel characteristic features such as vessel flag and engine power. This training dataset includes `r prettyNum(nrow(prediction_df),big.mark=',')` vessel-years of observation. 
 
 The model identifies `r prettyNum(n_predicted_positive_vessel_years_new,big.mark=",")` new high-risk vessel-years that were previously unlabeled.
 
