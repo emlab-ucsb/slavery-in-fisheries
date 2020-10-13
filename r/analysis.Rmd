@@ -437,8 +437,8 @@ write_csv(importance_data,here::here("interim_data/s8_figure_s5_data.csv"))
 # Robustness checks
 
 ```{r eval = params$run_robustness}
-robustness_results_df <- tibble(year_assumption = sort(unique(main_df$years_until_caught)[1])) %>% 
-  crossing(tibble(include_vessel_characteristics = c(TRUE,FALSE)[1])) %>%
+robustness_results_df <- tibble(year_assumption = sort(unique(main_df$years_until_caught))) %>% 
+  crossing(tibble(include_vessel_characteristics = c(TRUE,FALSE))) %>%
   mutate(robustness_results = map2(year_assumption,
                                    include_vessel_characteristics,
          function(year_assumption,include_vessel_characteristics){
@@ -508,7 +508,7 @@ prediction_df <- main_df %>%
 
   rf_mod <- rand_forest(
     mode = "classification",
-    trees = 1000
+    trees = 100
   ) %>%
     set_engine("ranger")
   
@@ -522,7 +522,7 @@ prediction_df <- main_df %>%
   # NA means no downsampling, so just the regular base classifier
   under_ratio_vec <- tibble(under_ratio = 1)
   # Number of bags
-  bag_vec <- tibble(bag = seq(5))
+  bag_vec <- tibble(bag = seq(100))
   # Different models to try
   model_type_vec <- tibble(model_type = c("random_forest"))
   
@@ -1111,9 +1111,8 @@ fraction_active_hours_included <- bq_project_query(gfw_project, sql) %>%
 ## Known registry vessel characteristics
 
 ```{r eval = params$use_big_query}
-# Plot how many vessels have known vessel characteristics, by year
-sql<-"
-WITH
+# Summarize how many vessels have known vessel characteristics
+sql <- "WITH
   risk_predictions AS(
   SELECT
     *
@@ -1153,22 +1152,17 @@ WITH
     (mmsi,
       year))
 SELECT
-  year,
-  COUNT(*) number_vessels,
-  SUM(known_length_m) number_vessels_known_length,
-  SUM(known_tonnage_gt) number_vessels_known_tonnage_gt,
-  SUM(known_engine_power_kw) number_vessels_known_engine_power_kw,
-  SUM(known_crew_size) number_vessels_known_crew_size,
-  SUM(known_length_m)/COUNT(*) fraction_vessels_known_length,
-  SUM(known_tonnage_gt)/COUNT(*) fraction_number_vessels_known_tonnage_gt,
-  SUM(known_engine_power_kw)/COUNT(*) fraction_number_vessels_known_engine_power_kw,
-  SUM(known_crew_size)/COUNT(*) fraction_number_vessels_known_crew_size
+  COUNT(*) number_vessel_years,
+  SUM(known_length_m) number_vessel_years_known_length,
+  SUM(known_tonnage_gt) number_vessel_years_known_tonnage_gt,
+  SUM(known_engine_power_kw) number_vessel_years_known_engine_power_kw,
+  SUM(known_crew_size) number_vessel_years_known_crew_size,
+  SUM(known_length_m)/COUNT(*) fraction_vessel_years_known_length,
+  SUM(known_tonnage_gt)/COUNT(*) fraction_number_vessel_years_known_tonnage_gt,
+  SUM(known_engine_power_kw)/COUNT(*) fraction_number_vessel_years_known_engine_power_kw,
+  SUM(known_crew_size)/COUNT(*) fraction_number_vessel_years_known_crew_size
 FROM
-  joined
-GROUP BY
-  year
-ORDER BY
-  year"
+  joined"
 
 known_vessel_info <- bq_project_query(gfw_project, sql) %>%
   bq_table_download(max_results = Inf)
@@ -1408,7 +1402,7 @@ vessels_fig_total <- vessels_fig_data_summary_combined %>%
   disco::scale_color_disco(palette = "rainbow", "Flag") +
   facet_grid(.~gear)+
   scale_y_continuous(labels=scales::comma)+ 
-  scale_x_continuous(breaks = unique(predictions_figures$year)) +
+ # scale_x_continuous(breaks = unique(robustness_predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
         axis.text.x = element_blank(),
         panel.grid.minor = element_blank())
@@ -1435,8 +1429,8 @@ vessels_fig_percentage <- robustness_predictions_figures %>%
   facet_grid(.~gear) +
   theme_bw()+
   scale_y_continuous(labels=scales::percent,limits = c(0,1))+ 
-  scale_x_continuous(breaks = unique(predictions_figures$year),
-                     labels = unique(predictions_figures$year)) +
+  scale_x_continuous(breaks = unique(robustness_predictions_figures$year),
+                     labels = unique(robustness_predictions_figures$year)) +
   theme(strip.background =element_rect(fill=NA),
         axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.minor = element_blank())+
@@ -1766,39 +1760,7 @@ ggsave(here::here("output_figures/figure_s5.png"),importance_fig,width=7.5,heigh
 
 \pagebreak
 
-# Figure S6 - Summary of known vessel registry information
-
-```{r eval = params$generate_figures}
-known_vessel_info_fig <- known_vessel_info %>%
-  mutate(year = as.character(year)) %>%
-  pivot_longer(-year) %>%
-  filter(name %in% c("fraction_vessels_known_length",
-                     "fraction_number_vessels_known_crew_size",
-                     "fraction_number_vessels_known_tonnage_gt",
-                     "fraction_number_vessels_known_engine_power_kw")) %>%
-  mutate(name = case_when(name=="fraction_vessels_known_length"~"Percentage of vessels with registry length",
-                          name=="fraction_number_vessels_known_crew_size"~"Percentage of vessels with registry crew size",
-                          name=="fraction_number_vessels_known_tonnage_gt"~"Percentage of vessels with registry tonnage",
-                          name=="fraction_number_vessels_known_engine_power_kw"~"Percentage of vessels with registry engine power")) %>%
-  ggplot(aes(x=year,y=value)) +
-  geom_bar(stat="identity",color="black") +
-  facet_wrap(name~.,ncol=1,scales="free_y") +
-  scale_y_continuous(labels = scales::percent) +
-  theme_bw() +
-  labs(x="",
-       y="") +
-  theme(strip.background = element_blank())
-
-known_vessel_info_fig
-
-ggsave(here::here("output_figures/figure_s6.png"),known_vessel_info_fig,width=7.5,height=5,device="png",dpi=300)
-
-```
-
-
-\pagebreak
-
-## Figure S7 - Cross-validation results from robustness checks
+## Figure S6 - Cross-validation results from robustness checks
 
 ```{r eval = params$generate_figures}
 robustness_cv_fig <- robustness_cv %>%
@@ -1826,13 +1788,13 @@ robustness_cv_fig <- robustness_cv %>%
 
 robustness_cv_fig
 
-ggsave(here::here("output_figures/figure_s7.png"),robustness_cv_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s6.png"),robustness_cv_fig,width=7.5,height=5,device="png",dpi=300)
 
 ```
 
 \pagebreak
 
-## Figure S8 - Final model results from robustness checks
+## Figure S7 - Final model results from robustness checks
 
 ```{r eval = TRUE}
 robustness_final <- robustness_predictions_figures %>%
@@ -1952,7 +1914,7 @@ robustness_final_fig <- robustness_final%>%
 
 robustness_final_fig
 
-ggsave(here::here("output_figures/figure_s8.png"),robustness_final_fig,width=7.5,height=7.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s7.png"),robustness_final_fig,width=7.5,height=7.5,device="png",dpi=300)
 
 ```
 
@@ -2104,6 +2066,7 @@ psma_countries_at_risk %>%
   kableExtra::kbl(caption = "Countries that had ratified the PSMA and were visited by high-risk vessels in 2018",longtable=TRUE)
 ```
 
+For the training dataset used in this analysis, `r round(known_vessel_info$fraction_vessel_years_known_length[1]*100)`% of vessel-years have known vessel length from registries, `r round(known_vessel_info$fraction_number_vessel_years_known_tonnage_gt[1]*100)`% have known gross tonnage, `r round(known_vessel_info$fraction_number_vessel_years_known_engine_power_kw[1]*100)`% have known engine power, and `r round(known_vessel_info$fraction_number_vessel_years_known_crew_size[1]*100)`% have known crew size.
 
 ## Using range of results from robustness checks
 
