@@ -1,30 +1,30 @@
 Feature,Importance,indicator_name,indicator_type
-ais_type_B,0.03886125409894589,AIS device type B,NA
-average_daily_fishing_hours,0.6699582169653129,Average daily fishing hours,gfw_fishing_model
-average_loitering_duration_hours,0.20537870231477334,Average loitering duration (hours),directly_observed
-engine_power_kw,1.314384799523479,Vessel engine power (kw),registry_or_gfw_vessel_model
-fishing_hours,0.05284728002966896,Fishing hours,gfw_fishing_model
-fishing_hours_foreign_eez,0.06574031091231988,Fishing hours in foreign EEZs,gfw_fishing_model
-fishing_hours_high_seas,0.5449324661185977,Fishing hours in high seas,gfw_fishing_model
-flag_CHN,0.025271210323780692,Flag: China,NA
-flag_ESP,0.012889787849305168,Flag: Spain,NA
-flag_FRA,0.004984452139298763,Flag: France,NA
-flag_GBR,1.2283061987310644e-5,Flag: United Kingdom,NA
-flag_ITA,0.008126756594047614,Flag: Italy,NA
-flag_other,0.009620327931537104,Flag: Other,NA
-flag_TWN,0.04740993577626711,Flag: Taiwan,NA
-flag_USA,0.01373512653986443,Flag: United States,NA
-gaps_24_hours,0.18376702083688864,Number of AIS gaps greater than 24 hours,directly_observed
-gear_squid_jigger,0.011626321626224238,Squid jigger,NA
-gear_trawlers,0.39795079551255824,Trawler,NA
-max_distance_from_port_km,1.2895088000788926,Maximum distance from port (km),directly_observed
-number_foreign_port_visits,0.446341600021937,Number of foreign port visits,directly_observed
-number_loitering_events,0.345350031638727,Number of loitering events,directly_observed
-number_voyages,0.6916130102479564,Number of voyages,directly_observed
-positions,0.12853105504933843,Number of AIS position messages,directly_observed
-year_X2013,0.0030595653366298813,Year: 2013,NA
-year_X2014,-0.008920535510393731,Year: 2014,NA
-year_X2015,0.024707947531129253,Year: 2015,NA
-year_X2016,-0.006518433679763072,Year: 2016,NA
-year_X2017,-0.006577230559870341,Year: 2017,NA
-year_X2018,0.07840753532583168,Year: 2018,NA
+ais_type_B,0.03545511441276933,AIS device type B,NA
+average_daily_fishing_hours,0.6802501296329552,Average daily fishing hours,gfw_fishing_model
+average_loitering_duration_hours,0.16961499764280505,Average loitering duration (hours),directly_observed
+engine_power_kw,1.2893263570609446,Vessel engine power (kw),registry_or_gfw_vessel_model
+fishing_hours,0.052380490545209525,Fishing hours,gfw_fishing_model
+fishing_hours_foreign_eez,0.10198491174842746,Fishing hours in foreign EEZs,gfw_fishing_model
+fishing_hours_high_seas,0.5805649949261994,Fishing hours in high seas,gfw_fishing_model
+flag_CHN,0.030897080120189543,Flag: China,NA
+flag_ESP,0.012378202856309937,Flag: Spain,NA
+flag_FRA,0.0035951502531777375,Flag: France,NA
+flag_GBR,3.957069244791638e-4,Flag: United Kingdom,NA
+flag_ITA,0.0037365086506905955,Flag: Italy,NA
+flag_other,0.008271695103912374,Flag: Other,NA
+flag_TWN,0.04593257078742858,Flag: Taiwan,NA
+flag_USA,0.009193608185190834,Flag: United States,NA
+gaps_24_hours,0.15584223783196555,Number of AIS gaps greater than 24 hours,directly_observed
+gear_squid_jigger,0.006112809566109887,Squid jigger,NA
+gear_trawlers,0.4012384540978338,Trawler,NA
+max_distance_from_port_km,1.320309167108481,Maximum distance from port (km),directly_observed
+number_foreign_port_visits,0.48750203093172756,Number of foreign port visits,directly_observed
+number_loitering_events,0.36778711293976735,Number of loitering events,directly_observed
+number_voyages,0.642941563221494,Number of voyages,directly_observed
+positions,0.101765315659238,Number of AIS position messages,directly_observed
+year_X2013,9.627495397732728e-4,Year: 2013,NA
+year_X2014,-0.006995332130102791,Year: 2014,NA
+year_X2015,0.02518226315244586,Year: 2015,NA
+year_X2016,-0.013299949650195198,Year: 2016,NA
+year_X2017,-0.011560502271711046,Year: 2017,NA
+year_X2018,0.06820728420200471,Year: 2018,NA

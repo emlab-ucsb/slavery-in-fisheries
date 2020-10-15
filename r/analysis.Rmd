@@ -1220,7 +1220,8 @@ port_data <- read_csv(here::here("interim_data/s6_figure_4_data.csv")) %>%
 # This will determine if there were any visits by known offenders across the entire 2012-2018 timeframe
 port_visit_summary <- port_data %>%
   group_by(port_iso3) %>%
-  summarize(has_known_offender_visits = ifelse(sum(known_offender_visits,na.rm=TRUE)>0,TRUE,FALSE)) %>%
+  summarize(has_known_offender_visits = ifelse(sum(known_offender_visits,na.rm=TRUE)>0,TRUE,FALSE),
+            no_known_offender_visits = !has_known_offender_visits) %>%
   ungroup()
 
 # For remaining analysis, just look at 2018
@@ -2017,15 +2018,11 @@ riskiest_fleets <-predictions_figures  %>%
 ```{r eval = TRUE}
 ## Port statistics
 # How many countries had visits by known offenders in the 2012-2018 timeframe?
-port_countries_known_offenders <- port_data%>%
-  filter(has_known_offender_visits) %>%
-  .$port_iso3 %>%
-  unique() %>%
-  length()
+port_countries_known_offenders <- sum(port_visit_summary$has_known_offender_visits)
 
-# How many countries have high-risk visits in 2018, but no previous known offender visits
+# How many countries have high-risk visits in 2018, but no known offender visits
 port_countries_high_risk_no_known_offenders <- port_data %>%
-  filter(high_risk_visits>0 & !has_known_offender_visits) %>%
+  filter(high_risk_visits>0 & no_known_offender_visits) %>%
   .$port_iso3 %>%
   unique() %>%
   length()
@@ -2093,7 +2090,7 @@ For the training dataset used in this analysis, `r round(known_vessel_info$known
 
 ```{r eval = TRUE}
 robustness_summary <- robustness_final %>%
-  filter(!include_vessel_characteristics) %>%
+  filter(include_vessel_characteristics) %>%
   pivot_longer(-c(year_assumption,include_vessel_characteristics)) %>%
   group_by(name) %>%
   mutate(value = signif(value,2)) %>%
