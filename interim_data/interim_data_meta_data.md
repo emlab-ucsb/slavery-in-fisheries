@@ -135,3 +135,13 @@ These data summarize how many vessel-years in our training dataset have known re
 * `known_tonnage_gt`: The number of vessel-years with known gross tonnage from vessel registries  
 * `known_engine_power_kw`: The number of vessel-years with known engine power from vessel registries  
 * `known_crew`: The number of vessel-years with known crew size from vessel registries  
+
+### s12_figure_s1_data.csv
+
+These data summarize the predicted class, by year, for each vessel in our forced labor vessel database using our baseline model. These data are used to help make Figure S1.
+
+* `year`: Year  
+* `class`: Predicted class (0 for low-risk of forced labor, 1 for high-risk of forced labor)  
+* `mmsi`: Maritime Mobile Service Identity (MMSI) unique vessel identifier   
+* `offender`: Boolean for whether this vessel-year is classified as positive (1, e.g., a boat that has reported cases of forced labor) or unlabeld (0, e.g., a boat that does not have reported cases of forced labor)          
+* `fldb_vessel_id`: Unique identifier created for the suspected forced labor vessel database   (`suspected_forced_labor_database.csv`)  
