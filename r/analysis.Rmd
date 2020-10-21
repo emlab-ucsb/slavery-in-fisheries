@@ -264,20 +264,21 @@ bag_performance <- map_df(bags_to_show,function(x){
                                                             thresholds=seq(0.01,0.99,0.01)))) %>%
     dplyr::select(-data) %>%
     unnest(threshold_perf) %>%
-    # Now for each hyperparameter set, we will take the average performance across all folds
     group_by(model_type,under_ratio,.threshold,.metric) %>%
-    # Get mean and SD of performance across folds
-    # Don't use na.rm=TRUE so that thresholds with undefined F1 scores are ignored from finding the optimal
-    # These would represent thresholds that could generate a detection prevalence of 0
+          # Get mean, min, and SD of performance across folds
+    # Don't compute if fold contains NAs or NaNs
     summarize(mean_performance = mean(.estimate),
-              sd_performance = sd(.estimate)) %>%
+              median_performance = median(.estimate),
+              sd_performance = sd(.estimate),
+              min_performance = min(.estimate)) %>%
     ungroup() %>%
     group_by(model_type,under_ratio) %>%
     nest() %>%
     ungroup() %>%
     # Now we will find the optimial threshold for maximizing the modified F1 estimator
-    # Maximize the mean
-    mutate(optimal_threshold = map_dbl(data,~.x %>%
+    # Maximize the mean, while ensuring min performance across folds is at least 0
+    mutate(optimal_threshold = map2_dbl(data,under_ratio,~.x %>%
+                                          filter(min_performance >0 | is.na(.y)) %>%
                                          filter(.metric=="modified_f1") %>%
                                          arrange(desc(mean_performance)) %>%
                                          slice(1) %>%
@@ -286,11 +287,11 @@ bag_performance <- map_df(bags_to_show,function(x){
            optimized_metrics = map2(data,optimal_threshold,~.x %>%
                                       filter(.threshold==.y))) %>% 
     unnest(optimized_metrics) %>%
-    dplyr::select(-optimal_threshold,-data) %>%
-    mutate(number_bags = x)
-  print(paste(x,"complete"))
-  tmp_performance
-})
+      dplyr::select(-optimal_threshold,-data) %>%
+      mutate(number_bags = x)
+    print(paste(x,"complete"))
+    tmp_performance
+  })
 # Save bag performance estimates for later
 write_csv(bag_performance,paste0(data_directory,"/tidy_cv_bag_performance.csv"))
 write_csv(bag_performance,here::here("interim_data/s7_figure_s3_data.csv"))
@@ -412,7 +413,8 @@ fldb_mmsi <- main_df %>%
   arrange(desc(year)) %>%
   slice(1) %>%
   ungroup() %>%
-  distinct(mmsi,fldb_vessel_id)
+  distinct(mmsi,fldb_vessel_id) %>%
+  mutate(mmsi = as.factor(mmsi))
 
 # Get predictions for all those MMSI across the whole time series
 predictions_fldb_mmsi <- predictions_figures %>% 
@@ -562,7 +564,7 @@ prediction_df <- main_df %>%
     filter(!(!bagging & bag >1)) %>%
     # Want different seed each time downsampling is done, for bagging
     mutate(seed = sample.int(10^5,n()))
-  
+
   pb <- progress_estimated(nrow(model_runs) * nrow(cv_splits))
   
   predictions <- model_runs %>%
@@ -625,28 +627,28 @@ prediction_df <- main_df %>%
                                                               thresholds=seq(0.01,0.99,0.01)))) %>%
       dplyr::select(-data) %>%
       unnest(threshold_perf) %>%
-      # Now for each hyperparameter set, we will take the average performance across all folds
-      # Get mean and SD of performance across folds
-      # Don't use na.rm=TRUE so that thresholds with undefined F1 scores are ignored from finding the optimal
-      # These would represent thresholds that could generate a detection prevalence of 0
-      group_by(model_type,under_ratio,.threshold,.metric) %>%
-      summarize(mean_performance = mean(.estimate),
-                sd_performance = sd(.estimate)) %>%
-      ungroup() %>%
-      group_by(model_type,under_ratio) %>%
-      nest() %>%
-      ungroup() %>%
-      # Now we will find the optimial threshold for maximizing the modified F1 estimator
-      # Maximize the mean
-      mutate(optimal_threshold = map_dbl(data,~.x %>%
-                                           filter(.metric=="modified_f1") %>%
-                                           arrange(desc(mean_performance)) %>%
-                                           slice(1) %>%
-                                           .$.threshold),
-             # optimized_metrics will contain metrics with optimized modified F1 estimator
-             optimized_metrics = map2(data,optimal_threshold,~.x %>%
-                                        filter(.threshold==.y))) %>% 
-      unnest(optimized_metrics) %>%
+    group_by(model_type,under_ratio,.threshold,.metric) %>%
+          # Get mean, min, and SD of performance across folds
+      # Don't compute if fold contains NAs or NaNs
+    summarize(mean_performance = mean(.estimate),
+              sd_performance = sd(.estimate),
+              min_performance = min(.estimate)) %>%
+    ungroup() %>%
+    group_by(model_type,under_ratio) %>%
+    nest() %>%
+    ungroup() %>%
+    # Now we will find the optimial threshold for maximizing the modified F1 estimator
+    # Maximize the mean, while ensuring min performance across folds is at least 0
+    mutate(optimal_threshold = map2_dbl(data,under_ratio,~.x %>%
+                                          filter(min_performance >0 | is.na(.y)) %>%
+                                         filter(.metric=="modified_f1") %>%
+                                         arrange(desc(mean_performance)) %>%
+                                         slice(1) %>%
+                                         .$.threshold),
+           # optimized_metrics will contain metrics with optimized modified F1 estimator
+           optimized_metrics = map2(data,optimal_threshold,~.x %>%
+                                      filter(.threshold==.y))) %>% 
+    unnest(optimized_metrics) %>%
       dplyr::select(-optimal_threshold,-data) %>%
       mutate(number_bags = x)
     print(paste(x,"complete"))
@@ -1319,7 +1321,7 @@ flag_predictions_other <- predictions_figures %>%
   ungroup() %>%
   group_by(gear) %>%
   mutate(fraction = count_vessels / sum(count_vessels)) %>%
-  mutate(Other = ifelse(fraction<0.05,TRUE,FALSE))
+  mutate(Other = ifelse(fraction<0.025,TRUE,FALSE))
 ```
 
 ```{r eval = params$generate_figures}
@@ -1393,7 +1395,7 @@ vessels_fig_data_summary_other <- robustness_predictions_figures %>%
   group_by(gear) %>%
   mutate(fraction = count_vessels_years / sum(count_vessels_years)) %>%
   ungroup() %>%
-  mutate(Other = ifelse(fraction<0.05,TRUE,FALSE))  %>%
+  mutate(Other = ifelse(fraction<0.025,TRUE,FALSE))  %>%
   dplyr::select(Country,gear,Other)
 
 vessels_fig_data_summary_combined <- robustness_predictions_figures %>%
@@ -1694,6 +1696,48 @@ ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,he
 
 \pagebreak
 
+## Figure S2 - Summary of training data labels
+
+```{r}
+
+training_dataset_fig <- sort(unique(main_df$years_until_caught)) %>%
+  map_df(function(x){
+    main_df %>%
+  # Only only include vessel-years from positives in the year prior to being caught
+  filter((offender == 1 & years_until_caught <= x) | offender == 0) %>%
+      group_by(year,gear,offender) %>%
+      summarize(count=n()) %>%
+      ungroup() %>%
+      mutate(year_assumption = x)
+  }) %>%
+  mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
+                          gear=="squid_jigger" ~ "Squid jigger",
+                          TRUE ~ "Trawler"))%>%
+  mutate(offender = ifelse(offender==0,"Unlabeled","Positive")) %>%
+  ggplot(aes(x=year,y=count,fill=gear)) + 
+  geom_bar(stat="identity",color="black",size=0.25) + 
+  #coord_flip() + 
+  facet_grid(offender~year_assumption,scales="free_y")+
+  disco::scale_fill_disco(palette = "bright", "Gear") +
+  theme_bw() +
+  labs(x="",y="")+
+  scale_x_continuous(breaks = seq(2012,2018),labels=c(2012,"","",2015,"","",2018)) +
+  scale_y_continuous(labels=scales::comma_format(accuracy=1))+ 
+  theme(strip.background =element_rect(fill=NA,
+                                       color = NA),
+        strip.text.y = element_text(hjust=0,angle=0),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45,hjust=1),
+        axis.title.y = element_text(angle=0,vjust=0.5))
+
+training_dataset_fig
+ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5,height=4.5,device="png",dpi=300)
+```
+
+\pagebreak
+
 ## Figure S3 - Cross-validation performance
 
 ```{r eval = params$generate_figures}
@@ -1826,7 +1870,7 @@ robustness_final <- robustness_predictions_figures %>%
     n_predicted_positive_vessel_years <- tmp_pred %>%
       filter(Prediction == "Positive") %>%
       nrow()
-    
+
     n_predicted_positive_vessel_years_new <- tmp_pred %>%
       filter(Prediction == "Positive" & Label == "Unlabeled") %>%
       nrow()
