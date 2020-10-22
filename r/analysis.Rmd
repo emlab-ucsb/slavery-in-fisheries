@@ -963,7 +963,9 @@ GROUP BY
   lon_bin"
 
 grouped_messages <- bq_project_query(gfw_project, sql) %>%
-  bq_table_download(max_results = Inf)
+  bq_table_download(max_results = Inf)%>% 
+  filter(lon_bin<180,
+         lat_bin<90)
 
 write_csv(grouped_messages %>%
             filter(year==2018) %>%
@@ -1484,12 +1486,47 @@ ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,
 ## Figure 3 - Spatial forced labor risk
 
 ```{r eval = params$generate_figures}
+#map_projection <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+map_projection <- "+proj=eqearth +datum=WGS84 +wktext"
+#map_projection <- "+proj=moll"
 world_land <- rworldmap::getMap(resolution = "low")
 
-world_bbox <- data.frame(xmin = -180,
-                         xmax = 180,
-                         ymin = -90,
-                         ymax=90)
+world_land_sf <- world_land%>%
+  st_as_sf() %>%
+  st_transform(map_projection)
+
+# Back bounding box of world, to use as black background
+# vectors of latitudes and longitudes that go once around the 
+# globe in 1-degree steps
+lats <- c(90:-90, -90:90, 90)
+longs <- c(rep(c(180, -180), each = 181), 180)
+
+world_bbox_sf <- 
+  list(cbind(longs, lats)) %>%
+  st_polygon() %>%
+  st_sfc( # create sf geometry list column
+    crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+  ) %>% 
+  st_sf() %>%
+  st_transform(map_projection)
+
+# Define unique spatial IDs for all grids
+location_ids <- grouped_messages  %>%
+  distinct(lon_bin,lat_bin) %>% 
+  mutate(location_id = row_number()) 
+
+# Convert grids to raster, then to polygons, then to sf, then re-project them
+location_ids_spatial <- location_ids %>%
+  raster::rasterFromXYZ(crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs") %>% 
+  raster::rasterToPolygons() %>% 
+  st_as_sf() %>%
+  st_transform(crs = map_projection)
+
+# Add spatial sf info to grids
+grouped_messages_sf <- location_ids_spatial %>%
+  left_join(grouped_messages %>%
+  left_join(location_ids,by=c("lon_bin","lat_bin")),by="location_id")
+  left_join(location_ids_spatial,by="location_id")
 
 map_palette <- "inferno"
 map_palette_begin <- 0.2
@@ -1498,24 +1535,16 @@ na_color <- viridis::viridis(n=5,option=map_palette,begin=map_palette_begin)[1]
 pal <- c(viridis::inferno(n = 8))[c(3,5:8)]
 pal <- c("midnightblue",viridis::inferno(n = 7)[c(3:7)])
 
-
-world_land_sf <- world_land%>%
-  st_as_sf() %>%
-  st_transform("+proj=moll")
-
-map_figure_rel <-   grouped_messages %>%
+map_figure_rel <-   grouped_messages_sf %>%
   filter(!is.na(gear))%>%
   mutate(gear = case_when(gear=="drifting_longlines" ~ "(A) Longliner",
                           gear=="squid_jigger" ~ "(B) Squid jigger",
                           TRUE ~ "(C) Trawler")) %>%
   ggplot() +
-  geom_rect(data=world_bbox, aes(xmin=xmin , xmax=xmax, ymin=ymin, ymax=ymax ), color="grey30", fill="black")+
-  geom_tile(aes(x=lon_bin,y=lat_bin,fill = fraction_at_risk_fishing_kW_hours,color=fraction_at_risk_fishing_kW_hours),size=0) +
- geom_polygon(data = world_land, fill = "grey60", color = "grey60",
-              aes(x = long,
-                 y = lat,
-                group = group)) +
-  scale_fill_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  geom_sf(data = world_bbox_sf, color="grey30", fill="black") +
+  geom_sf(aes(fill = fraction_at_risk_fishing_kW_hours),color=NA,lwd=0) +
+  geom_sf(data = world_land_sf, fill = "grey45", color = "grey45")+
+  scale_fill_gradientn(name = "Percentage\nfishing\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
   theme_minimal() +
   theme(panel.background = element_blank(),
         panel.grid.minor = element_line(colour = "black"),
@@ -1531,13 +1560,11 @@ map_figure_rel <-   grouped_messages %>%
   )  +
   labs(
     x = "",
-    y = "")+ 
-  scale_color_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),guide=FALSE,labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
-  facet_wrap(.~gear,ncol=1) +
-  coord_map("mollweide",xlim=c(-180,180))
+    y = "")  +
+  facet_wrap(.~gear,ncol=1)
 
-map_figure_rel
-ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)                                    
+
+ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=6,height=7.5,device="png",dpi=300)
 ```
 
 \pagebreak
@@ -1551,28 +1578,7 @@ world_land_ports <- world_land %>%
   dplyr::select(geometry,port_iso3) %>%
   left_join(port_data %>%
                filter(year==2018),by="port_iso3") %>%
-  st_transform("+proj=moll")
-
-world_bbox_sf <- tibble(x = c(180,180,-180,-180,180),y=c(90,-90,-90,90,90)) %>% 
-  as.matrix() %>% 
-  list() %>% 
-  st_polygon() %>%
-  st_sfc(crs=4326)
-
-# vectors of latitudes and longitudes that go once around the 
-# globe in 1-degree steps
-lats <- c(90:-90, -90:90, 90)
-longs <- c(rep(c(180, -180), each = 181), 180)
-
-# turn into correctly projected sf collection
-world_bbox_sf <- 
-  list(cbind(longs, lats)) %>%
-  st_polygon() %>%
-  st_sfc( # create sf geometry list column
-    crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-  ) %>% 
-  st_sf() %>%
-  st_transform("+proj=moll")
+  st_transform(map_projection)
 
 port_map_figure_rel <-   world_land_ports   %>%
   filter(!is.na(gear))%>%
@@ -1586,7 +1592,7 @@ port_map_figure_rel <-   world_land_ports   %>%
                    color = has_known_offender_visits),
           size=0.1) +
   scale_fill_gradientn(name = "Percentage\nport visits\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
-  scale_color_manual("Has known positive\nport visits",
+  scale_color_manual("Has known\npositive\nport visits",
                      values = c("grey40","white")) +
   theme_minimal() +
   theme(panel.background = element_blank(),
@@ -1610,7 +1616,7 @@ port_map_figure_rel <-   world_land_ports   %>%
 
 port_map_figure_rel
 
-ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)      
+ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=6,height=7.5,device="png",dpi=300)      
 ```
 
 \pagebreak
