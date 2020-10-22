@@ -2171,9 +2171,9 @@ robustness_summary <- robustness_final %>%
             max = max(value,na.rm=TRUE)) %>%
   ungroup() %>%
   mutate(range = ifelse(!str_detect(name,"fraction"),
-                        paste0(prettyNum(round(min),big.mark=","),
+                        paste0(prettyNum(round(min),big.mark=",",scientific=FALSE),
                                " and ",
-                               prettyNum(round(max),big.mark=",")),
+                               prettyNum(round(max),big.mark=",",scientific=FALSE)),
                         paste0(round(min*100),
                                "% and ",
                                round(max*100),"%")))
