@@ -15,7 +15,7 @@ params:
 ---
 
 ```{r echo = FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.height=7.5, fig.width=7.5,eval=FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.height=7.5, fig.width=7.5,eval=FALSE,dev = 'png',dpi = 300)
 
 ## A note about using this R Markdown notebook:
 ## This is a parameterized notebook. The code chunks that will be run are determined by several toggles at the top of the document.
@@ -1484,8 +1484,12 @@ ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,
 ## Figure 3 - Spatial forced labor risk
 
 ```{r eval = params$generate_figures}
-world_land <- rworldmap::getMap(resolution = "low") %>%
-  st_as_sf()
+world_land <- rworldmap::getMap(resolution = "low")
+
+world_bbox <- data.frame(xmin = -180,
+                         xmax = 180,
+                         ymin = -90,
+                         ymax=90)
 
 map_palette <- "inferno"
 map_palette_begin <- 0.2
@@ -1494,32 +1498,43 @@ na_color <- viridis::viridis(n=5,option=map_palette,begin=map_palette_begin)[1]
 pal <- c(viridis::inferno(n = 8))[c(3,5:8)]
 pal <- c("midnightblue",viridis::inferno(n = 7)[c(3:7)])
 
+
+world_land_sf <- world_land%>%
+  st_as_sf() %>%
+  st_transform("+proj=moll")
+
 map_figure_rel <-   grouped_messages %>%
   filter(!is.na(gear))%>%
   mutate(gear = case_when(gear=="drifting_longlines" ~ "(A) Longliner",
                           gear=="squid_jigger" ~ "(B) Squid jigger",
                           TRUE ~ "(C) Trawler")) %>%
   ggplot() +
-  geom_tile(aes(x = lon_bin, y = lat_bin, fill = fraction_at_risk_fishing_kW_hours,color=fraction_at_risk_fishing_kW_hours)) +
-  geom_sf(data = world_land, fill = "grey45", color = "grey45") +
+  geom_rect(data=world_bbox, aes(xmin=xmin , xmax=xmax, ymin=ymin, ymax=ymax ), color="grey30", fill="black")+
+  geom_tile(aes(x=lon_bin,y=lat_bin,fill = fraction_at_risk_fishing_kW_hours,color=fraction_at_risk_fishing_kW_hours),size=0) +
+ geom_polygon(data = world_land, fill = "grey60", color = "grey60",
+              aes(x = long,
+                 y = lat,
+                group = group)) +
   scale_fill_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
   theme_minimal() +
-  theme(panel.background = element_rect(fill="black"),
+  theme(panel.background = element_blank(),
+        panel.grid.minor = element_line(colour = "black"),
         panel.grid.major = element_line(colour = "black"),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
+        strip.background = element_rect(fill=NA,color=NA),
         text = element_text(size=15),
         legend.direction = "vertical"
-  ) +
+  )  +
   labs(
     x = "",
     y = "")+ 
-  ylim(c(-70, NA)) +
   scale_color_gradientn(name = "Percentage\nfishing kW-hours\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),guide=FALSE,labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
-  facet_wrap(.~gear,ncol=1)
+  facet_wrap(.~gear,ncol=1) +
+  coord_map("mollweide",xlim=c(-180,180))
 
 map_figure_rel
 ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)                                    
@@ -1531,34 +1546,50 @@ ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=7.5,height
 
 ```{r eval = params$generate_figures}
 world_land_ports <- world_land %>% 
-  as_tibble() %>%
+  st_as_sf() %>%
   mutate(port_iso3 = as.character(ISO3.1)) %>%
   dplyr::select(geometry,port_iso3) %>%
-  inner_join(port_data %>%
+  left_join(port_data %>%
                filter(year==2018),by="port_iso3") %>%
-  st_as_sf()
+  st_transform("+proj=moll")
 
+world_bbox_sf <- tibble(x = c(180,180,-180,-180,180),y=c(90,-90,-90,90,90)) %>% 
+  as.matrix() %>% 
+  list() %>% 
+  st_polygon() %>%
+  st_sfc(crs=4326)
 
+# vectors of latitudes and longitudes that go once around the 
+# globe in 1-degree steps
+lats <- c(90:-90, -90:90, 90)
+longs <- c(rep(c(180, -180), each = 181), 180)
 
-pal <- c("midnightblue",viridis::inferno(n = 7)[c(3:7)])
+# turn into correctly projected sf collection
+world_bbox_sf <- 
+  list(cbind(longs, lats)) %>%
+  st_polygon() %>%
+  st_sfc( # create sf geometry list column
+    crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+  ) %>% 
+  st_sf() %>%
+  st_transform("+proj=moll")
 
-port_map_figure_rel <-   world_land_ports %>%
+port_map_figure_rel <-   world_land_ports   %>%
   filter(!is.na(gear))%>%
   mutate(gear = case_when(gear=="drifting_longlines" ~ "(A) Longliner",
                           gear=="squid_jigger" ~ "(B) Squid jigger",
-                          TRUE ~ "(C) Trawler")) %>%
-  ggplot() +
-  geom_sf(data = world_land, fill = "grey45", color = "grey45") +
-  geom_sf(aes(
-    fill = fraction_high_risk_visits,
-    color = has_known_offender_visits
-  ),
-    size=0.1) +
+                          TRUE ~ "(C) Trawler"))%>%
+  ggplot()  +
+  geom_sf(data = world_bbox_sf, color="grey30", fill="black")+
+  geom_sf(data = world_land_sf, fill = "grey45", color = "grey45") +
+  geom_sf(aes(fill = fraction_high_risk_visits,
+                   color = has_known_offender_visits),
+          size=0.1) +
   scale_fill_gradientn(name = "Percentage\nport visits\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
   scale_color_manual("Has known positive\nport visits",
                      values = c("grey40","white")) +
   theme_minimal() +
-  theme(panel.background = element_rect(fill="black"),
+  theme(panel.background = element_blank(),
         panel.grid.major = element_line(colour = "black"),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
@@ -1573,12 +1604,10 @@ port_map_figure_rel <-   world_land_ports %>%
     x = "",
     y = ""
   ) + 
-  ylim(c(-70, NA)) +
   facet_wrap(.~gear,ncol=1)+ 
   guides(color = guide_legend(override.aes = list(size = 1,
                                                   fill = "black")))
 
-#port_map_figure <- cowplot::plot_grid(port_map_figure_abs,port_map_figure_rel)
 port_map_figure_rel
 
 ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=7.5,height=7.5,device="png",dpi=300)      
