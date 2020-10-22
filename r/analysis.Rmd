@@ -1524,10 +1524,11 @@ location_ids_spatial <- location_ids %>%
   st_transform(crs = map_projection)
 
 # Add spatial sf info to grids
+grouped_messages <- grouped_messages %>%
+              left_join(location_ids,by=c("lon_bin","lat_bin"))
+
 grouped_messages_sf <- location_ids_spatial %>%
-  left_join(grouped_messages %>%
-  left_join(location_ids,by=c("lon_bin","lat_bin")),by="location_id")
-  left_join(location_ids_spatial,by="location_id")
+  left_join(grouped_messages,by="location_id")
 
 map_palette <- "inferno"
 map_palette_begin <- 0.2
@@ -1564,6 +1565,7 @@ map_figure_rel <-   grouped_messages_sf %>%
     y = "")  +
   facet_wrap(.~gear,ncol=1)
 
+map_figure_rel
 
 ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=6,height=7.5,device="png",dpi=300)
 ```
