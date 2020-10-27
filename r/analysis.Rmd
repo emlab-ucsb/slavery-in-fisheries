@@ -1215,7 +1215,7 @@ predictions_figures <- read.csv(here::here("interim_data/s4_final_model_predicti
 fldb_data <-read_csv(here::here("raw_data/s3_suspected_forced_labor_database.csv"))
 
 # Pull in spatial forced labor risk data
-grouped_messages <- read.csv(here::here("interim_data/s5_figure_3_data.csv"))
+grouped_messages <- read.csv(here::here("interim_data/s5_figure_3_data.csv"),stringsAsFactors = FALSE)
 
 # Pull in port data
 port_data <- read_csv(here::here("interim_data/s6_figure_4_data.csv")) %>%
@@ -1544,9 +1544,10 @@ map_figure_rel <-   grouped_messages_sf %>%
                           TRUE ~ "(C) Trawler")) %>%
   ggplot() +
   geom_sf(data = world_bbox_sf, color="grey30", fill="black") +
-  geom_sf(aes(fill = fraction_at_risk_fishing_kW_hours),color=NA,lwd=0) +
+  geom_sf(aes(fill = fraction_at_risk_fishing_kW_hours,color=fraction_at_risk_fishing_kW_hours),lwd=0) +
   geom_sf(data = world_land_sf, fill = "grey45", color = "grey45")+
-  scale_fill_gradientn(name = "Percentage\nfishing\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
+  scale_fill_gradientn(name = "Percentage\nfishing\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)+
+  scale_color_gradientn(name = "Percentage\nfishing\nhigh-risk", na.value = pal[1], values = c(0,0.1,.25,0.5,0.75,1),labels=paste0(seq(0,1,.25)*100,"%"),breaks=seq(0,1,.25),colors=pal)  +
   theme_minimal() +
   theme(panel.background = element_blank(),
         panel.grid.minor = element_line(colour = "black"),
@@ -2203,6 +2204,7 @@ robustness_fleets_summary <- robustness_fleets%>%
   summarize(count = sum(count)) %>%
   ungroup() %>%
   arrange(desc(count))%>%
+  slice(1:5) %>%
   mutate(gear = case_when(gear == "squid_jigger" ~ "squid jiggers",
                                     gear == "drifting_longlines" ~ "longliners",
                                     gear == "trawlers" ~ "trawlers")) %>% 
