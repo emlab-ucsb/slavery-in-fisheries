@@ -991,6 +991,90 @@ write_csv(grouped_messages %>%
                   -fraction_known_offender_fishing_kW_hours) ,path=here::here("interim_data/s5_figure_3_data.csv"))
 ```
 
+```{r}
+sql <- "#standardSQL
+WITH
+  fishing_info AS(
+  SELECT
+    *
+  FROM
+    `ucsb-gfw.human_rights.binned_fishing_base`),
+  extra_offsetting_filter AS(
+  SELECT
+    CAST(ssvid AS INT64) mmsi,
+    year,
+    TRUE extra_offsetting
+  FROM
+    `ucsb-gfw.human_rights.extra_offsetting_filter` ),
+  vessel_info AS(
+  SELECT
+    mmsi,
+    year,
+    gear,
+    flag,
+    engine_power_kw
+  FROM
+    `ucsb-gfw.human_rights.vessel_info_all`),
+  risk AS(
+  SELECT
+    mmsi,
+    year,
+    include_vessel_characteristics,
+    year_assumption,
+    class,
+    offender
+  FROM
+    `ucsb-gfw.human_rights.risk_predictions_robust`),
+  joined AS(
+  SELECT
+    *
+  FROM
+    vessel_info
+  LEFT JOIN
+    fishing_info
+  USING
+    (mmsi,
+      year)
+  LEFT JOIN
+    risk
+  USING
+    (mmsi,
+      year)
+  LEFT JOIN
+    extra_offsetting_filter
+  USING
+    (mmsi,
+      year)
+  WHERE extra_offsetting IS NULL)
+SELECT
+  year,
+  year_assumption,
+  include_vessel_characteristics,
+  gear,
+  flag,
+  lat_bin,
+  lon_bin,
+  SUM(fishing_hours) fishing_hours,
+  SUM(fishing_hours * offender) known_offender_fishing_hours,
+  SUM(fishing_hours * class) at_risk_fishing_hours,
+  SUM(fishing_hours * engine_power_kw) fishing_kW_hours,
+  SUM(fishing_hours * offender * engine_power_kw) known_offender_fishing_kW_hours,
+  SUM(fishing_hours * class * engine_power_kw) at_risk_fishing_kW_hours
+FROM
+  joined
+GROUP BY
+  year,
+  year_assumption,
+  include_vessel_characteristics,
+  gear,
+  flag,
+  lat_bin,
+  lon_bin"
+
+bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "grouped_fishing_info_predicted_robust",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
+```
+
+
 \pagebreak
 
 ## High risk port visits
