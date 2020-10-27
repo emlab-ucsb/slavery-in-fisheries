@@ -822,11 +822,24 @@ predictions_figures_private <- read.csv(here::here("interim_data/s4_final_model_
   dplyr::select(mmsi,year,gear,offender,fldb_vessel_id,prediction=.pred_1,class,crew_size,flag,Country) %>%
   mutate(mmsi = as.integer(mmsi))
 
-
 bq_table(project = ucsb_project,table = "risk_predictions",dataset = "human_rights") %>%
   bq_table_upload(values = predictions_figures_private,
                   fields = as_bq_fields(predictions_figures_private),
                   write_disposition = "WRITE_TRUNCATE")
+
+# Upload risk predictions from robustness checks
+# This uses the private version of the file that has actual MMSIs
+robustness_predictions_figures_private <- read.csv(here::here("interim_data/s10_robustness_predictions_figures_private.csv"),stringsAsFactors = FALSE) %>%
+  as_tibble() %>%
+  dplyr::select(year_assumption,include_vessel_characteristics,mmsi,year,gear,offender,fldb_vessel_id,prediction=.pred_1,class,flag) %>%
+  mutate(mmsi = as.integer(mmsi))
+
+bq_table(project = ucsb_project,table = "risk_predictions_robust",dataset = "human_rights") %>%
+  bq_table_upload(values = robustness_predictions_figures_private,
+                  fields = as_bq_fields(robustness_predictions_figures_private),
+                  write_disposition = "WRITE_TRUNCATE")
+
+# Summarize gridded fishing data
 
 sql<-"SELECT
   mmsi,
@@ -851,6 +864,8 @@ GROUP BY
 
 # Only run this once since it's so expensive
 #bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "binned_fishing_base",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
+
+# Summarize risk for gridded fishing data
 
 sql <- "#standardSQL
 WITH
@@ -926,6 +941,8 @@ GROUP BY
   lon_bin"
 
 bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "grouped_fishing_info_predicted",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
+
+# Generate larger resolution gridded risk data for figure 3
 
 sql <- "#standardSQL
   WITH base AS(
