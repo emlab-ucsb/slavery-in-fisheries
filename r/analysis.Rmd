@@ -21,7 +21,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.height
 ## This is a parameterized notebook. The code chunks that will be run are determined by several toggles at the top of the document.
 ## run_analysis - If this is TRUE, the entire model cross-validation, training, and prediction analysis will be run. When this happens, all results will be cached and saved. This GitHub currently has cached results from the analysis as it was published in PNAS.
 ## run_robustness - If this is TRUE, the full suite of robustness checks will be run. When this happens, all results will be cached and saved. This GitHub currently has cached results from the analysis as it was published in PNAS.
-## generate_figures - If this is TRUE, all figures for the PNAS manuscript will be generated. This not only generates figures for this markdown notebook, but also caches the figures as .png files.This GitHub currently has cached figures as they were published in PNAS.
+## generate_figures - If this is TRUE, all figures for the PNAS manuscript will be generated. This not only generates figures for this markdown notebook, but also caches the figures as pdf files.This GitHub currently has cached figures as they were published in PNAS.
 ## use_big_query - In this section, we upload vessel-level risk predictions from the analysis to Google BigQuery. Using this information and matching it with spatial fishing effort and port visit information from Global Fishing Watch, we then download spatial forced labor risk fishing effort data and forced labor risk port visit data. **Note:** This section can only be run with proper authentication credentials for accessing specific tables in Global Fishing Watch's BigQuery project.
 ```
 
@@ -62,7 +62,7 @@ data_directory <- ifelse(Sys.info()["sysname"]=="Windows","G:/Shared\ drives/emL
                          "/Volumes/GoogleDrive/Shared\ drives/emLab/Projects/current-projects/forced-labor-and-fisheries/data/phase-1")
 
 # Read in cached data
-main_df <- read_csv(here::here("raw_data/s1_training_full.csv")) %>%
+main_df <- read_csv(here::here("raw_data/s1_training_final.csv")) %>%
   filter(!is.na(flag)) %>%
   # Only include gears for which we have known offenders
   filter(gear %in% c("drifting_longlines","squid_jigger","trawlers")) %>%
@@ -1307,7 +1307,7 @@ indicator_figure <- indicator_figure_data %>%
 
 indicator_figure
 
-ggsave(here::here("output_figures/figure_1.png"),indicator_figure,width=8,height=8,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_1.pdf"),indicator_figure,width=8,height=8,device="pdf",dpi=1200)
 ```
 
 \pagebreak
@@ -1477,7 +1477,7 @@ vessels_fig <- cowplot::plot_grid(plot_grid(vessels_fig_total+ theme(legend.posi
                                   rel_widths = c(4,1))  
 vessels_fig
 
-ggsave(here::here("output_figures/figure_2.png"),vessels_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_2.pdf"),vessels_fig,width=7.5,height=5,device="pdf",dpi=1200)
 
 ```
 
@@ -1568,7 +1568,7 @@ map_figure_rel <-   grouped_messages_sf %>%
 
 map_figure_rel
 
-ggsave(here::here("output_figures/figure_3.png"),map_figure_rel,width=6,height=7.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_3.pdf"),map_figure_rel,width=6,height=7.5,device="pdf",dpi=1200)
 ```
 
 \pagebreak
@@ -1620,7 +1620,7 @@ port_map_figure_rel <-   world_land_ports   %>%
 
 port_map_figure_rel
 
-ggsave(here::here("/output_figures/figure_4.png"),port_map_figure_rel,width=6,height=7.5,device="png",dpi=300)      
+ggsave(here::here("/output_figures/figure_4.pdf"),port_map_figure_rel,width=6,height=7.5,device="pdf",dpi=1200)      
 ```
 
 \pagebreak
@@ -1730,14 +1730,14 @@ ilo_indicator_fig <- combined_case_data %>%
 
 ilo_indicator_fig
 
-ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=7.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s1.pdf"),ilo_indicator_fig,width=7.5,height=7.5,device="pdf",dpi=1200)
 ```
 
 \pagebreak
 
 ## Figure S2 - Summary of training data labels
 
-```{r}
+```{r eval = params$generate_figures}
 
 training_dataset_fig <- sort(unique(main_df$years_until_caught)) %>%
   map_df(function(x){
@@ -1772,7 +1772,7 @@ training_dataset_fig <- sort(unique(main_df$years_until_caught)) %>%
         axis.title.y = element_text(angle=0,vjust=0.5))
 
 training_dataset_fig
-ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5,height=4.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s2.pdf"),training_dataset_fig,width=7.5,height=4.5,device="pdf",dpi=1200)
 ```
 
 \pagebreak
@@ -1810,7 +1810,7 @@ mutate(under_ratio = ifelse(is.na(under_ratio),"N",under_ratio) %>%
 
 cv_performance_fig
 
-ggsave(here::here("output_figures/figure_s3.png"),cv_performance_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s3.pdf"),cv_performance_fig,width=7.5,height=5,device="pdf",dpi=1200)
 ```
 
 \pagebreak
@@ -1838,7 +1838,7 @@ class_fig <- predictions_figures  %>%
 
 class_fig
 
-ggsave(here::here("output_figures/figure_s4.png"),class_fig,width=7.5,height=3.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s4.pdf"),class_fig,width=7.5,height=3.5,device="pdf",dpi=1200)
 ```
 
 \pagebreak
@@ -1857,7 +1857,7 @@ importance_fig <- read_csv(here::here("interim_data/s8_figure_s5_data.csv")) %>%
 
 importance_fig
 
-ggsave(here::here("output_figures/figure_s5.png"),importance_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s5.pdf"),importance_fig,width=7.5,height=5,device="pdf",dpi=1200)
 ```
 
 \pagebreak
@@ -1890,7 +1890,7 @@ robustness_cv_fig <- robustness_cv %>%
 
 robustness_cv_fig
 
-ggsave(here::here("output_figures/figure_s6.png"),robustness_cv_fig,width=7.5,height=5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s6.pdf"),robustness_cv_fig,width=7.5,height=5,device="pdf",dpi=1200)
 
 ```
 
@@ -2016,7 +2016,7 @@ robustness_final_fig <- robustness_final%>%
 
 robustness_final_fig
 
-ggsave(here::here("output_figures/figure_s7.png"),robustness_final_fig,width=7.5,height=7.5,device="png",dpi=300)
+ggsave(here::here("output_figures/figure_s7.pdf"),robustness_final_fig,width=7.5,height=7.5,device="pdf",dpi=1200)
 
 ```
 
