@@ -30,3 +30,5 @@ vignettes/*.pdf
 *.Rprofile
 .DS_Store
 *.html  
+*.pdf
+r/*.pdf
