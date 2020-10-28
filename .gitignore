@@ -29,6 +29,4 @@ vignettes/*.pdf
 *.Rproj
 *.Rprofile
 .DS_Store
-*.html  
-*.pdf
-r/*.pdf
+*.html

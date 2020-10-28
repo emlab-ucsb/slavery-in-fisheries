@@ -865,7 +865,7 @@ GROUP BY
 # Only run this once since it's so expensive
 #bq_project_query(gfw_project,sql, destination_table = bq_table(project = ucsb_project,table = "binned_fishing_base",dataset = "human_rights"),use_legacy_sql = FALSE, allowLargeResults = TRUE,write_disposition = "WRITE_TRUNCATE")
 
-# Summarize risk for gridded fishing data
+# Summarize risk for gridded fishing data, using baseline model assumption
 
 sql <- "#standardSQL
 WITH
@@ -991,7 +991,8 @@ write_csv(grouped_messages %>%
                   -fraction_known_offender_fishing_kW_hours) ,path=here::here("interim_data/s5_figure_3_data.csv"))
 ```
 
-```{r}
+```{r eval=params$use_big_query}
+# Also summarize risk for gridded data, across all model assumptions
 sql <- "#standardSQL
 WITH
   fishing_info AS(
