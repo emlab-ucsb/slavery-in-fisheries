@@ -1832,7 +1832,7 @@ ilo_indicator_fig <- combined_case_data %>%
 
 ilo_indicator_fig
 
-ggsave(here::here("output_figures/figure_s1.pdf"),ilo_indicator_fig,width=7.5,height=7.5,device="pdf",dpi=1200)
+ggsave(here::here("output_figures/figure_s1.png"),ilo_indicator_fig,width=7.5,height=7.5,device="png",dpi=1200)
 ```
 
 \pagebreak
@@ -1874,7 +1874,7 @@ training_dataset_fig <- sort(unique(main_df$years_until_caught)) %>%
         axis.title.y = element_text(angle=0,vjust=0.5))
 
 training_dataset_fig
-ggsave(here::here("output_figures/figure_s2.pdf"),training_dataset_fig,width=7.5,height=4.5,device="pdf",dpi=1200)
+ggsave(here::here("output_figures/figure_s2.png"),training_dataset_fig,width=7.5,height=4.5,device="png",dpi=1200)
 ```
 
 \pagebreak
@@ -1912,7 +1912,7 @@ mutate(under_ratio = ifelse(is.na(under_ratio),"N",under_ratio) %>%
 
 cv_performance_fig
 
-ggsave(here::here("output_figures/figure_s3.pdf"),cv_performance_fig,width=7.5,height=5,device="pdf",dpi=1200)
+ggsave(here::here("output_figures/figure_s3.png"),cv_performance_fig,width=7.5,height=5,device="png",dpi=1200)
 ```
 
 \pagebreak
@@ -1940,7 +1940,7 @@ class_fig <- predictions_figures  %>%
 
 class_fig
 
-ggsave(here::here("output_figures/figure_s4.pdf"),class_fig,width=7.5,height=3.5,device="pdf",dpi=1200)
+ggsave(here::here("output_figures/figure_s4.png"),class_fig,width=7.5,height=3.5,device="png",dpi=1200)
 ```
 
 \pagebreak
@@ -1959,7 +1959,7 @@ importance_fig <- read_csv(here::here("interim_data/s8_figure_s5_data.csv")) %>%
 
 importance_fig
 
-ggsave(here::here("output_figures/figure_s5.pdf"),importance_fig,width=7.5,height=5,device="pdf",dpi=1200)
+ggsave(here::here("output_figures/figure_s5.png"),importance_fig,width=7.5,height=5,device="png",dpi=1200)
 ```
 
 \pagebreak
@@ -1992,7 +1992,7 @@ robustness_cv_fig <- robustness_cv %>%
 
 robustness_cv_fig
 
-ggsave(here::here("output_figures/figure_s6.pdf"),robustness_cv_fig,width=7.5,height=5,device="pdf",dpi=1200)
+ggsave(here::here("output_figures/figure_s6.png"),robustness_cv_fig,width=7.5,height=5,device="png",dpi=1200)
 
 ```
 
@@ -2118,7 +2118,7 @@ robustness_final_fig <- robustness_final%>%
 
 robustness_final_fig
 
-ggsave(here::here("output_figures/figure_s7.pdf"),robustness_final_fig,width=7.5,height=7.5,device="pdf",dpi=1200)
+ggsave(here::here("output_figures/figure_s7.png"),robustness_final_fig,width=7.5,height=7.5,device="png",dpi=1200)
 
 ```
 
