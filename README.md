@@ -1,5 +1,5 @@
 # slavery-in-fisheries
-This repository contains the code and data for reproducing McDonald, *et al.* 2020 (PNAS) in review: "Satellites reveal global extent of forced labor in the world’s fishing fleet".
+This repository contains the code and data for reproducing McDonald *et al.* 2020 (PNAS) *in press**: "Satellites can reveal global extent of forced labor in the world's fishing fleet".
 
 The DOI for this code and data repository will be managed with Zenodo.
 
@@ -7,7 +7,7 @@ The DOI for this code and data repository will be managed with Zenodo.
 
 > **Authors**: Gavin G. McDonald, Christopher Costello, Jennifer Bone, Reniel B. Cabral, Valerie Farabee, Timothy Hochberg, David Kroodsma, Tracey Mangin, Kyle C. Meng, Oliver Zahn
 
-> **Abstract:** While forced labor in the world’s fishing fleet has been widely documented, its extent remains unknown. Additionally, no methods previously existed for remotely identifying individual fishing vessels engaged in these abuses on a global scale. By combining expertise from human rights practitioners and satellite vessel monitoring data, we show that vessels reported to use forced labor behave in systematically different ways from other vessels. We exploit this insight by using machine learning to identify high-risk vessels from among 16,000 industrial longliner, squid jigger, and trawler fishing vessels. Our model reveals that 11-16% of vessels were high-risk, and also reveals patterns of where these vessels fished and which ports they visited. Between 43,000 and 68,000 individuals worked on these vessels, many of whom may have been forced labor victims. This information provides unprecedented opportunities for novel interventions to combat this humanitarian tragedy. More broadly, this research demonstrates the potential for remote sensing to detect forced labor abuses.
+> **Abstract:** While forced labor in the world’s fishing fleet has been widely documented, its extent remains unknown. No methods previously existed for remotely identifying individual fishing vessels potentially engaged in these abuses on a global scale. By combining expertise from human rights practitioners and satellite vessel monitoring data, we show that vessels reported to use forced labor behave in systematically different ways from other vessels. We exploit this insight by using machine learning to identify high-risk vessels from among 16,000 industrial longliner, squid jigger, and trawler fishing vessels. Our model reveals that between 14 and 26% of vessels were high-risk, and also reveals patterns of where these vessels fished and which ports they visited. Between 57,000 and 100,000 individuals worked on these vessels, many of whom may have been forced labor victims. This information provides unprecedented opportunities for novel interventions to combat this humanitarian tragedy. More broadly, this research demonstrates a proof of concept for using remote sensing to detect forced labor abuses.
 
 ## Software
 
