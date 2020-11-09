@@ -1,9 +1,9 @@
 # slavery-in-fisheries
-This repository contains the code and data for reproducing McDonald *et al.* 2020 (PNAS) *in press**: "Satellites can reveal global extent of forced labor in the world's fishing fleet".
+This repository contains the code and data for reproducing McDonald *et al.* 2020 (PNAS) *in press*: "Satellites can reveal global extent of forced labor in the world's fishing fleet".
 
 The DOI for this code and data repository will be managed with Zenodo.
 
-> **Title**: Satellites reveal global extent of forced labor in the world’s fishing fleet
+> **Title**: Satellites can reveal global extent of forced labor in the world’s fishing fleet
 
 > **Authors**: Gavin G. McDonald, Christopher Costello, Jennifer Bone, Reniel B. Cabral, Valerie Farabee, Timothy Hochberg, David Kroodsma, Tracey Mangin, Kyle C. Meng, Oliver Zahn
 
