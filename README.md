@@ -1,7 +1,7 @@
 # slavery-in-fisheries
 This repository contains the code and data for reproducing McDonald *et al.* 2020 (PNAS) *in press*: "Satellites can reveal global extent of forced labor in the world's fishing fleet".
 
-The DOI for this code and data repository will be managed with Zenodo.
+The DOI for this code and data repository is 10.5281/zenodo.4265061.
 
 > **Title**: Satellites can reveal global extent of forced labor in the world’s fishing fleet
 
