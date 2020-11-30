@@ -1522,6 +1522,8 @@ vessels_fig_data_summary_combined <- robustness_predictions_figures %>%
                                                   count_vessels_average=0)) %>%
   ungroup()
 
+write_csv(vessels_fig_data_summary_combined,here::here("interim_data/figure_2_data.csv"))
+
 vessels_fig_total <- vessels_fig_data_summary_combined %>%
   mutate(gear = case_when(gear=="drifting_longlines" ~ "Longliner",
                           gear=="squid_jigger" ~ "Squid jigger",

@@ -1,0 +1,134 @@
+gear,Country,year,count_vessels_average,count_vessels_min,count_vessels_max
+drifting_longlines,China,2012,46.833333333333336,38,52
+drifting_longlines,China,2013,81.66666666666667,75,89
+drifting_longlines,China,2014,123.66666666666667,110,137
+drifting_longlines,China,2015,256.8333333333333,190,302
+drifting_longlines,China,2016,267.6666666666667,210,320
+drifting_longlines,China,2017,299.1666666666667,243,342
+drifting_longlines,China,2018,218.16666666666666,70,293
+drifting_longlines,Japan,2012,95,87,101
+drifting_longlines,Japan,2013,117.33333333333333,107,126
+drifting_longlines,Japan,2014,147.66666666666666,131,157
+drifting_longlines,Japan,2015,228.5,168,269
+drifting_longlines,Japan,2016,243.5,159,314
+drifting_longlines,Japan,2017,209.66666666666666,88,285
+drifting_longlines,Japan,2018,144.83333333333334,15,246
+drifting_longlines,Other,2012,40.333333333333336,25,54
+drifting_longlines,Other,2013,47.666666666666664,32,61
+drifting_longlines,Other,2014,62.166666666666664,42,81
+drifting_longlines,Other,2015,86.66666666666667,58,114
+drifting_longlines,Other,2016,110.16666666666667,47,175
+drifting_longlines,Other,2017,125.83333333333333,59,195
+drifting_longlines,Other,2018,104,26,176
+drifting_longlines,South Korea,2012,134,134,134
+drifting_longlines,South Korea,2013,122.33333333333333,121,123
+drifting_longlines,South Korea,2014,114,113,115
+drifting_longlines,South Korea,2015,109.66666666666667,108,112
+drifting_longlines,South Korea,2016,112.16666666666667,106,114
+drifting_longlines,South Korea,2017,99.83333333333333,76,107
+drifting_longlines,South Korea,2018,54.5,5,81
+drifting_longlines,Spain,2012,77.5,21,108
+drifting_longlines,Spain,2013,78.66666666666667,26,110
+drifting_longlines,Spain,2014,76,22,109
+drifting_longlines,Spain,2015,71.83333333333333,19,107
+drifting_longlines,Spain,2016,37.666666666666664,5,66
+drifting_longlines,Spain,2017,30.8,7,44
+drifting_longlines,Spain,2018,10.25,6,15
+drifting_longlines,Taiwan,2012,29.833333333333332,19,38
+drifting_longlines,Taiwan,2013,125.5,98,148
+drifting_longlines,Taiwan,2014,224.66666666666666,182,251
+drifting_longlines,Taiwan,2015,363,307,397
+drifting_longlines,Taiwan,2016,445.1666666666667,353,497
+drifting_longlines,Taiwan,2017,564,421,646
+drifting_longlines,Taiwan,2018,519.3333333333334,189,692
+drifting_longlines,Vanuatu,2012,1,1,1
+drifting_longlines,Vanuatu,2013,1,1,1
+drifting_longlines,Vanuatu,2014,10.5,9,11
+drifting_longlines,Vanuatu,2015,37.666666666666664,31,44
+drifting_longlines,Vanuatu,2016,40,33,44
+drifting_longlines,Vanuatu,2017,42.666666666666664,31,49
+drifting_longlines,Vanuatu,2018,37.166666666666664,10,51
+squid_jigger,China,2012,48.666666666666664,26,64
+squid_jigger,China,2013,170,84,226
+squid_jigger,China,2014,298,188,352
+squid_jigger,China,2015,353,263,392
+squid_jigger,China,2016,400.5,285,451
+squid_jigger,China,2017,415.8333333333333,231,487
+squid_jigger,China,2018,323.3333333333333,3,504
+squid_jigger,Other,2012,26,5,54
+squid_jigger,Other,2013,15.333333333333334,7,32
+squid_jigger,Other,2014,21.666666666666668,8,49
+squid_jigger,Other,2015,20.833333333333332,3,51
+squid_jigger,Other,2016,27.5,3,66
+squid_jigger,Other,2017,27.8,3,57
+squid_jigger,Other,2018,28,22,42
+squid_jigger,South Korea,2012,38,38,38
+squid_jigger,South Korea,2013,39.166666666666664,37,40
+squid_jigger,South Korea,2014,42.166666666666664,40,43
+squid_jigger,South Korea,2015,40.166666666666664,37,41
+squid_jigger,South Korea,2016,39.666666666666664,36,41
+squid_jigger,South Korea,2017,34.833333333333336,20,41
+squid_jigger,South Korea,2018,25.25,14,31
+squid_jigger,Taiwan,2012,82.66666666666667,80,85
+squid_jigger,Taiwan,2013,89.66666666666667,87,91
+squid_jigger,Taiwan,2014,84.33333333333333,78,87
+squid_jigger,Taiwan,2015,86.5,82,88
+squid_jigger,Taiwan,2016,88,78,91
+squid_jigger,Taiwan,2017,78.83333333333333,45,92
+squid_jigger,Taiwan,2018,56.75,33,79
+trawlers,China,2012,4.166666666666667,2,6
+trawlers,China,2013,7.166666666666667,6,10
+trawlers,China,2014,22.166666666666668,13,35
+trawlers,China,2015,28.5,18,44
+trawlers,China,2016,19.166666666666668,6,28
+trawlers,China,2017,17.166666666666668,5,27
+trawlers,China,2018,9.5,4,15
+trawlers,Falkland Islands,2012,12,3,15
+trawlers,Falkland Islands,2013,12.5,7,14
+trawlers,Falkland Islands,2014,12.666666666666666,7,15
+trawlers,Falkland Islands,2015,10.333333333333334,2,14
+trawlers,Falkland Islands,2016,8.25,3,11
+trawlers,Falkland Islands,2017,5.25,2,8
+trawlers,Falkland Islands,2018,3,1,4
+trawlers,Faroe Islands,2012,7.333333333333333,4,10
+trawlers,Faroe Islands,2013,6.166666666666667,3,9
+trawlers,Faroe Islands,2014,7.5,2,11
+trawlers,Faroe Islands,2015,6.833333333333333,1,13
+trawlers,Faroe Islands,2016,5.5,1,8
+trawlers,Faroe Islands,2017,4,4,4
+trawlers,Faroe Islands,2018,2,1,3
+trawlers,Other,2012,60.166666666666664,12,104
+trawlers,Other,2013,35.166666666666664,6,57
+trawlers,Other,2014,39.5,6,70
+trawlers,Other,2015,34.166666666666664,2,69
+trawlers,Other,2016,27.166666666666668,3,57
+trawlers,Other,2017,23.166666666666668,3,44
+trawlers,Other,2018,8.666666666666666,1,19
+trawlers,Portugal,2012,5.833333333333333,4,10
+trawlers,Portugal,2013,4.333333333333333,1,8
+trawlers,Portugal,2014,6.5,4,10
+trawlers,Portugal,2015,7.833333333333333,6,10
+trawlers,Portugal,2016,8.666666666666666,8,11
+trawlers,Portugal,2017,8.5,6,11
+trawlers,Portugal,2018,5.833333333333333,1,8
+trawlers,Russia,2012,115.5,37,180
+trawlers,Russia,2013,96.66666666666667,20,160
+trawlers,Russia,2014,101.66666666666667,21,167
+trawlers,Russia,2015,84.5,11,163
+trawlers,Russia,2016,60.166666666666664,8,128
+trawlers,Russia,2017,36.2,2,78
+trawlers,Russia,2018,20.5,10,27
+trawlers,South Korea,2012,15.166666666666666,11,19
+trawlers,South Korea,2013,14,9,19
+trawlers,South Korea,2014,15.666666666666666,10,22
+trawlers,South Korea,2015,10,5,15
+trawlers,South Korea,2016,10,1,16
+trawlers,South Korea,2017,5.6,2,9
+trawlers,South Korea,2018,2.75,1,4
+trawlers,Spain,2012,20.666666666666668,7,29
+trawlers,Spain,2013,26.333333333333332,14,34
+trawlers,Spain,2014,26.5,13,35
+trawlers,Spain,2015,25.666666666666668,9,41
+trawlers,Spain,2016,16.666666666666668,6,30
+trawlers,Spain,2017,17,4,28
+trawlers,Spain,2018,9.2,1,12
